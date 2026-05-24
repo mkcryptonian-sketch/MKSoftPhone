@@ -1,0 +1,39 @@
+# Build artifacts
+/build
+/app/build
+.gradle
+.kotlin
+captures/
+
+# IDE files
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Local configuration
+local.properties
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# C++ build artifacts
+.externalNativeBuild
+.cxx
+
+# PJSIP and OpenSSL build artifacts (typically not checked in if using AAR)
+/openssl-3.3.2/
+/openssl-3.3.2.tar.gz
+/openssl-android-arm64/
+/pjproject/
+/temp_aar/
+/tools/
+
+# Build scripts
+build_pjsip.sh
+build_pjsip_tls.sh
+build_openssl_android*.sh
+
+# Generated files
+app/google-services.json

@@ -1,0 +1,134 @@
+<resources>
+    <string name="app_name">MK Softphone</string>
+
+    <!-- SipService Notifications -->
+    <string name="channel_service_name">VoIP SIP Service Channel</string>
+    <string name="channel_service_description">Maintains connection to VoIP SIP Server</string>
+    <string name="channel_call_name">VoIP Incoming Calls</string>
+    <string name="channel_call_description">Shows heads-up notifications for incoming VoIP calls</string>
+
+    <string name="service_starting_title">SIP Engine Starting&#8230;</string>
+    <string name="service_starting_text">Initializing system bindings</string>
+    <string name="service_error_title">SIP Connection Error</string>
+    <string name="service_connecting_title">Connecting&#8230;</string>
+    <string name="service_connecting_text">Configuring Native SIP client</string>
+    <string name="service_active_call_title">Active Call</string>
+    <string name="service_active_call_text">Talking with %1$s</string>
+    <string name="service_registered_text">%1$d account(s) registered</string>
+    <string name="service_no_accounts_text">No active accounts configured</string>
+    <string name="service_offline_title">SIP Client Offline</string>
+    <string name="service_offline_text">Start app to connect</string>
+
+    <string name="incoming_call_title">Incoming VoIP Call</string>
+    <string name="action_answer">Answer</string>
+    <string name="action_decline">Decline</string>
+
+    <!-- MainActivity -->
+    <string name="perm_mic_required">Microphone permission is required for VoIP calls</string>
+
+    <!-- Login Screen -->
+    <string name="login_welcome">Welcome to MK Softphone</string>
+    <string name="login_subtitle">Sign in to connect and call</string>
+    <string name="login_username_label">Username (e.g. user@domain.com)</string>
+    <string name="login_password_label">Password</string>
+    <string name="login_hide_password">Hide password</string>
+    <string name="login_show_password">Show password</string>
+    <string name="login_error_fields">Please enter both username and password</string>
+    <string name="login_error_domain">Username must include domain (e.g. user@domain.com)</string>
+    <string name="login_use_push_proxy">Enable PUSH Proxy</string>
+    <string name="login_push_proxy_desc">Recommended for external providers. Uses Flexisip gateway to deliver incoming calls via push notifications.</string>
+    <string name="login_button_label">LOG IN</string>
+
+    <!-- MainScreen & Navigation -->
+    <string name="route_dialer">Dialer</string>
+    <string name="route_history">Recent Calls</string>
+    <string name="route_contacts">Contacts</string>
+    <string name="route_accounts">Accounts</string>
+    <string name="route_settings">Settings</string>
+    <string name="route_recordings">Call Recordings</string>
+    <string name="route_warnings">System Logs</string>
+    <string name="route_account_details">Account Details</string>
+
+    <string name="nav_logout">Log Out</string>
+    <string name="nav_exit">Exit App</string>
+    <string name="logout_confirm_title">Log Out</string>
+    <string name="logout_confirm_text">Are you sure you want to log out? You will no longer receive any push notifications or incoming calls.</string>
+    <string name="exit_confirm_title">Exit App</string>
+    <string name="exit_confirm_text">Are you sure you want to exit? The background service will be stopped to save battery, but you will still receive push notifications for incoming calls.</string>
+    <string name="logging_out_text">Logging out&#8230;</string>
+    <string name="logging_out_subtext">Clearing secure credentials and closing app.</string>
+
+    <!-- Status & Presence -->
+    <string name="status_ready">Ready</string>
+    <string name="status_connecting">Connecting</string>
+    <string name="status_error">Error</string>
+    <string name="status_offline">Offline</string>
+    <string name="status_account_ready">Account is ready</string>
+    <string name="status_registering">Registering&#8230;</string>
+    <string name="status_reg_failed">Registration failed (SIP %1$d)</string>
+
+    <!-- Dialer -->
+    <string name="dialer_hint">SIP Address or extension</string>
+    <string name="dialer_placeholder">echo@iptel.org</string>
+    <string name="dialer_create_contact">Create Contact</string>
+    <string name="dialer_add_to_contact">Add to Contact</string>
+    <string name="dialer_no_accounts">No configured accounts! Go to Accounts screen to register.</string>
+
+    <!-- History -->
+    <string name="history_no_calls">No recent calls</string>
+    <string name="history_clear_all">Clear All</string>
+    <string name="history_title">Recent Logs</string>
+
+    <!-- Contacts -->
+    <string name="contacts_tab_app">App Contacts</string>
+    <string name="contacts_tab_device">Device Contacts</string>
+    <string name="contacts_no_saved">No saved contacts</string>
+    <string name="contacts_perm_required">Permission Required</string>
+    <string name="contacts_perm_desc">Access to device contacts is needed to place calls directly from your address book.</string>
+    <string name="contacts_grant_perm">Grant Permission</string>
+    <string name="contacts_no_device">No device contacts found</string>
+    <string name="contacts_add_title">Add SIP Contact</string>
+
+    <!-- Accounts -->
+    <string name="accounts_tab_sip">SIP Accounts</string>
+    <string name="accounts_tab_iax">IAX Accounts</string>
+    <string name="accounts_iax_coming_soon">IAX2 Support Coming Soon</string>
+    <string name="accounts_iax_desc">IAX2 accounts are not supported by the current native PJSIP engine build. This tab will allow configuring IAX accounts once the engine support is fully integrated.</string>
+    <string name="accounts_no_sip">No registered SIP accounts</string>
+    <string name="accounts_add_prompt">Tap the "+" button below to add a new account.</string>
+
+    <!-- Settings -->
+    <string name="settings_engine_title">Engine Settings</string>
+    <string name="settings_service_status">VoIP Service Status</string>
+    <string name="settings_service_active">Foreground Service Active</string>
+    <string name="settings_service_stopped">Service Stopped</string>
+    <string name="settings_auto_start">Auto Start on Boot</string>
+    <string name="settings_auto_start_desc">Launch app backend when Android devices boot completed</string>
+    <string name="settings_save_changes">Save Changes</string>
+
+    <!-- Recordings -->
+    <string name="recordings_title">Audio Files</string>
+    <string name="recordings_empty">No call recordings found</string>
+
+    <!-- Warnings/Logs -->
+    <string name="warnings_title">Native JNI Trace Log</string>
+    <string name="warnings_empty">No logs capture. Start calling to see debug JNI logs.</string>
+
+    <!-- Call Overlay -->
+    <string name="call_duration_zero">00:00</string>
+    <string name="call_state_idle">Idle</string>
+    <string name="call_state_incoming">Incoming Call&#8230;</string>
+    <string name="call_state_dialing">Dialing&#8230;</string>
+    <string name="call_state_connecting">Connecting&#8230;</string>
+    <string name="call_state_active">Active Call</string>
+    <string name="call_state_disconnected">Disconnected</string>
+    <string name="call_action_mute">Mute</string>
+    <string name="call_action_keypad">Keypad</string>
+    <string name="call_action_speaker">Speaker</string>
+    <string name="call_action_hold">Hold</string>
+    <string name="call_action_resume">Resume</string>
+    <string name="call_action_record">Record</string>
+    <string name="call_action_recording">Recording</string>
+    <string name="call_action_add">Add Call</string>
+    <string name="call_action_merge">Merge Calls</string>
+</resources>

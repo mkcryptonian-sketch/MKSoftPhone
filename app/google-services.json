@@ -1,0 +1,68 @@
+{
+  "project_info": {
+    "project_number": "159258710785",
+    "firebase_url": "https://cdofoundation-default-rtdb.firebaseio.com",
+    "project_id": "cdofoundation",
+    "storage_bucket": "cdofoundation.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:159258710785:android:4ee34ef102ffc944fc0100",
+        "android_client_info": {
+          "package_name": "com.cdoapp.online"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBATQbZg7Iqt6L98NehrGdivUqkTbqy0Qw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:159258710785:android:d51c27335ae5816bfc0100",
+        "android_client_info": {
+          "package_name": "com.mksoft.phone"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBATQbZg7Iqt6L98NehrGdivUqkTbqy0Qw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:159258710785:android:05f9497824d59a32fc0100",
+        "android_client_info": {
+          "package_name": "com.sovereign.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBATQbZg7Iqt6L98NehrGdivUqkTbqy0Qw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

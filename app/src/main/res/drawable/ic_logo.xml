@@ -1,0 +1,71 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="512dp"
+    android:height="512dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    
+    <!-- Pitch Black Tech Background -->
+    <path
+        android:fillColor="#0A0A0C"
+        android:pathData="M 115,0 L 397,0 A 115,115 0 0 1 512,115 L 512,397 A 115,115 0 0 1 397,512 L 115,512 A 115,115 0 0 1 0,397 L 0,115 A 115,115 0 0 1 115,0 Z"/>
+    
+    <!-- Group with translation (dx=0, dy=25) -->
+    <group
+        android:translateX="0"
+        android:translateY="25">
+        
+        <!-- The 'M' as Audio Bars (Cyan) -->
+        <path
+            android:strokeColor="#00E5FF"
+            android:strokeWidth="24"
+            android:strokeLineCap="round"
+            android:pathData="M 130,320 L 130,180"/>
+        <path
+            android:strokeColor="#00E5FF"
+            android:strokeWidth="24"
+            android:strokeLineCap="round"
+            android:pathData="M 170,320 L 170,140"/>
+        <path
+            android:strokeColor="#00E5FF"
+            android:strokeWidth="24"
+            android:strokeLineCap="round"
+            android:pathData="M 210,320 L 210,200"/>
+        <path
+            android:strokeColor="#00E5FF"
+            android:strokeWidth="24"
+            android:strokeLineCap="round"
+            android:pathData="M 250,320 L 250,140"/>
+        <path
+            android:strokeColor="#00E5FF"
+            android:strokeWidth="24"
+            android:strokeLineCap="round"
+            android:pathData="M 290,320 L 290,180"/>
+        
+        <!-- The 'K' as Audio Bars (Orange) -->
+        <path
+            android:strokeColor="#FF5722"
+            android:strokeWidth="24"
+            android:strokeLineCap="round"
+            android:pathData="M 340,320 L 340,140"/>
+        <path
+            android:strokeColor="#FF5722"
+            android:strokeWidth="24"
+            android:strokeLineCap="round"
+            android:pathData="M 380,230 L 380,180"/>
+        <path
+            android:strokeColor="#FF5722"
+            android:strokeWidth="24"
+            android:strokeLineCap="round"
+            android:pathData="M 420,180 L 420,140"/>
+        <path
+            android:strokeColor="#FF5722"
+            android:strokeWidth="24"
+            android:strokeLineCap="round"
+            android:pathData="M 380,320 L 380,270"/>
+        <path
+            android:strokeColor="#FF5722"
+            android:strokeWidth="24"
+            android:strokeLineCap="round"
+            android:pathData="M 420,320 L 420,230"/>
+    </group>
+</vector>

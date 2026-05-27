@@ -46,6 +46,8 @@
     <string name="route_accounts">Accounts</string>
     <string name="route_settings">Settings</string>
     <string name="route_recordings">Call Recordings</string>
+    <string name="route_messaging">Messaging</string>
+    <string name="route_chat">Chat</string>
     <string name="route_warnings">System Logs</string>
     <string name="route_account_details">Account Details</string>
 

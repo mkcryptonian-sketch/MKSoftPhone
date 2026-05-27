@@ -89,8 +89,8 @@ dependencies {
   implementation("androidx.compose.material:material-icons-core")
   implementation("androidx.compose.material:material-icons-extended")
 
-  // Local PJSIP AAR
-  implementation(files("libs/pjsua2.aar"))
+  // Linphone SDK dependency
+  implementation("org.linphone:linphone-sdk-android:5.3.77")
 
   // Javax Inject
   implementation("javax.inject:javax.inject:1")

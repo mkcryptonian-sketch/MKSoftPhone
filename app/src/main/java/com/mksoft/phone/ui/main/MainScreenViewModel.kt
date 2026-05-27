@@ -33,6 +33,10 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     
     // Active Calls Flow
     val activeCalls: StateFlow<Map<Int, CallWrapper>> = sipEngineManager.activeCalls
+    val isConferenceActive: StateFlow<Boolean> = sipEngineManager.isConferenceActive
+
+    // Live Call Stats Flow
+    val callStats: StateFlow<Map<Int, CallStats>> = sipEngineManager.callStats
     
     // SIP Native Logs Flow (latest 100 entries)
     private val _logsList = MutableStateFlow<List<SipLogEntry>>(emptyList())
@@ -65,6 +69,10 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     val primaryAccountId: StateFlow<String?> = repository.primaryAccountId
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
+    // Messaging Flow
+    val messages: StateFlow<List<SipChatMessage>> = repository.messages
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     // Socket transport probing state
     enum class ProbeStatus {
         Untested,
@@ -80,8 +88,16 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         val iax: ProbeStatus = ProbeStatus.Untested
     )
 
+    data class TransferSession(
+        val originalCallId: Int,
+        val targetCallId: Int? = null
+    )
+
     private val _probeState = MutableStateFlow(ProbeResult())
     val probeState: StateFlow<ProbeResult> = _probeState.asStateFlow()
+
+    private val _transferSession = MutableStateFlow<TransferSession?>(null)
+    val transferSession: StateFlow<TransferSession?> = _transferSession.asStateFlow()
 
     init {
         // Collect native logs and update our state
@@ -95,6 +111,14 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                 _logsList.value = current
             }
         }
+
+        // Collect incoming messages
+        viewModelScope.launch {
+            sipEngineManager.incomingMessages.collect { message ->
+                repository.addChatMessage(message)
+                Log.d("MainScreenViewModel", "Persisted incoming message: ${message.content}")
+            }
+        }
         
         // Listen to active calls to automatically save calls to history when they end
         viewModelScope.launch {
@@ -102,6 +126,30 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             var activeCallDetails = mutableMapOf<Int, CallWrapper>()
             
             sipEngineManager.activeCalls.collect { currentCalls ->
+                // Handle Transfer Session logic: identify the target call
+                val session = _transferSession.value
+                if (session != null && session.targetCallId == null) {
+                    val newCallId = currentCalls.keys.find { it != session.originalCallId && !lastActiveCallIds.contains(it) }
+                    if (newCallId != null) {
+                        _transferSession.value = session.copy(targetCallId = newCallId)
+                        Log.d("MainScreenViewModel", "Linked target call $newCallId to transfer session for ${session.originalCallId}")
+                    }
+                }
+
+                // If a transfer session exists and one of the calls ends, clear the session
+                if (session != null) {
+                    if (!currentCalls.containsKey(session.originalCallId)) {
+                        // Original caller hung up, just clear session
+                        _transferSession.value = null
+                    } else if (session.targetCallId != null && !currentCalls.containsKey(session.targetCallId)) {
+                        // Transfer target hung up or rejected before completion.
+                        // Automatically unhold the original caller.
+                        Log.d("MainScreenViewModel", "Transfer target hung up. Resuming original call.")
+                        sipEngineManager.setHold(session.originalCallId, false)
+                        _transferSession.value = null
+                    }
+                }
+
                 // Look for calls that were in the map, but are no longer there (disconnected)
                 for ((callId, wrapper) in currentCalls) {
                     activeCallDetails[callId] = wrapper
@@ -126,11 +174,13 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                                 timestamp = System.currentTimeMillis(),
                                 duration = duration,
                                 isIncoming = detail.isIncoming,
-                                wasAnswered = wasAnswered
+                                wasAnswered = wasAnswered,
+                                isThirdParty = detail.isThirdParty
                             )
                         )
                     }
                     activeCallDetails.remove(id)
+                    refreshRecordings()
                 }
                 lastActiveCallIds = currentCalls.keys
             }
@@ -140,7 +190,10 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     }
     
     fun refreshRecordings() {
-        _recordings.value = repository.getRecordingsList(context)
+        viewModelScope.launch(Dispatchers.IO) {
+            val list = repository.getRecordingsList(context)
+            _recordings.value = list
+        }
     }
     
     fun initializeEngine() {
@@ -418,6 +471,77 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             sipEngineManager.conferenceCalls()
         }
     }
+
+    fun transferCall(callId: Int, destination: String) {
+        viewModelScope.launch {
+            val callWrapper = sipEngineManager.activeCalls.value[callId] ?: return@launch
+            val accountId = callWrapper.accountId
+            
+            // 1. Put current call on hold
+            sipEngineManager.setHold(callId, true)
+            
+            // 2. Start a new transfer session
+            _transferSession.value = TransferSession(originalCallId = callId)
+            
+            // 3. Initiate the call to the other party
+            makeSipCall(accountId, destination)
+        }
+    }
+
+    fun completeTransfer() {
+        val session = _transferSession.value ?: return
+        val targetId = session.targetCallId ?: return
+        
+        viewModelScope.launch {
+            sipEngineManager.attendedTransfer(session.originalCallId, targetId)
+            _transferSession.value = null
+        }
+    }
+
+    fun cancelTransfer() {
+        val session = _transferSession.value ?: return
+        viewModelScope.launch {
+            // Hang up the second call if it exists
+            session.targetCallId?.let { hangupActiveCall(it) }
+            // Resume the original call
+            sipEngineManager.setHold(session.originalCallId, false)
+            _transferSession.value = null
+        }
+    }
+
+    fun deleteRecording(file: File) {
+        viewModelScope.launch {
+            try {
+                if (file.exists()) {
+                    file.delete()
+                }
+                refreshRecordings()
+            } catch (e: Exception) {
+                android.util.Log.e("MainScreenViewModel", "Failed to delete file: ${e.message}")
+            }
+        }
+    }
+
+    // Messaging management
+    fun sendSipMessage(peerUri: String, content: String) {
+        val outMessage = SipChatMessage(
+            id = UUID.randomUUID().toString(),
+            peerUri = peerUri,
+            content = content,
+            timestamp = System.currentTimeMillis(),
+            isIncoming = false
+        )
+        repository.addChatMessage(outMessage)
+        sipEngineManager.sendMessage("", peerUri, content)
+    }
+
+    fun markAsRead(peerUri: String) {
+        repository.markMessagesAsRead(peerUri)
+    }
+
+    fun clearChat(peerUri: String) {
+        repository.clearChatHistory(peerUri)
+    }
     
     // Contacts management
     fun addContact(displayName: String, sipAddress: String) {
@@ -441,18 +565,66 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         expiry: Int,
         logLevel: Int,
         outboundProxy: String = repository.settings.value.outboundProxy,
-        localDomain: String = repository.settings.value.localDomain
+        localDomain: String = repository.settings.value.localDomain,
+        aecEnabled: Boolean = repository.settings.value.aecEnabled,
+        agcEnabled: Boolean = repository.settings.value.agcEnabled,
+        wakeLockEnabled: Boolean = repository.settings.value.wakeLockEnabled,
+        backgroundKeepAliveEnabled: Boolean = repository.settings.value.backgroundKeepAliveEnabled,
+        transportProtocol: String = repository.settings.value.transportProtocol,
+        turnServer: String = repository.settings.value.turnServer,
+        iceEnabled: Boolean = repository.settings.value.iceEnabled,
+        keepAliveInterval: Int = repository.settings.value.keepAliveInterval,
+        rportEnabled: Boolean = repository.settings.value.rportEnabled,
+        ipv6Preference: String = repository.settings.value.ipv6Preference,
+        dtmfMethod: String = repository.settings.value.dtmfMethod,
+        echoCancellationType: String = repository.settings.value.echoCancellationType,
+        nativeCallIntegrationEnabled: Boolean = repository.settings.value.nativeCallIntegrationEnabled,
+        pushNotificationsEnabled: Boolean = repository.settings.value.pushNotificationsEnabled,
+        dndSyncEnabled: Boolean = repository.settings.value.dndSyncEnabled,
+        attendedTransferEnabled: Boolean = repository.settings.value.attendedTransferEnabled,
+        blfEnabled: Boolean = repository.settings.value.blfEnabled,
+        videoEnabled: Boolean = repository.settings.value.videoEnabled,
+        limeEnabled: Boolean = repository.settings.value.limeEnabled,
+        proximitySensorEnabled: Boolean = repository.settings.value.proximitySensorEnabled,
+        zrtpSasDisplayEnabled: Boolean = repository.settings.value.zrtpSasDisplayEnabled,
+        sipMessagingEnabled: Boolean = repository.settings.value.sipMessagingEnabled,
+        postQuantumEnabled: Boolean = repository.settings.value.postQuantumEnabled
     ) {
-        repository.updateSettings(
-            repository.settings.value.copy(
-                autoStartOnBoot = autoStart,
-                stunServer = stunServer,
-                registrationExpiry = expiry,
-                logLevel = logLevel,
-                outboundProxy = outboundProxy,
-                localDomain = localDomain
-            )
+        val newSettings = repository.settings.value.copy(
+            autoStartOnBoot = autoStart,
+            stunServer = stunServer,
+            registrationExpiry = expiry,
+            logLevel = logLevel,
+            outboundProxy = outboundProxy,
+            localDomain = localDomain,
+            aecEnabled = aecEnabled,
+            agcEnabled = agcEnabled,
+            wakeLockEnabled = wakeLockEnabled,
+            backgroundKeepAliveEnabled = backgroundKeepAliveEnabled,
+            transportProtocol = transportProtocol,
+            turnServer = turnServer,
+            iceEnabled = iceEnabled,
+            keepAliveInterval = keepAliveInterval,
+            rportEnabled = rportEnabled,
+            ipv6Preference = ipv6Preference,
+            dtmfMethod = dtmfMethod,
+            echoCancellationType = echoCancellationType,
+            nativeCallIntegrationEnabled = nativeCallIntegrationEnabled,
+            pushNotificationsEnabled = pushNotificationsEnabled,
+            dndSyncEnabled = dndSyncEnabled,
+            attendedTransferEnabled = attendedTransferEnabled,
+            blfEnabled = blfEnabled,
+            videoEnabled = videoEnabled,
+            limeEnabled = limeEnabled,
+            proximitySensorEnabled = proximitySensorEnabled,
+            zrtpSasDisplayEnabled = zrtpSasDisplayEnabled,
+            sipMessagingEnabled = sipMessagingEnabled,
+            postQuantumEnabled = postQuantumEnabled
         )
+        repository.updateSettings(newSettings)
+        
+        // Push changes to the live engine
+        sipEngineManager.applyGlobalSettings(newSettings)
     }
     
     fun clearHistory() {

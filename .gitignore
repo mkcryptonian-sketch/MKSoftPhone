@@ -37,3 +37,15 @@ build_openssl_android*.sh
 
 # Generated files
 app/google-services.json
+
+# Local logs and config
+*.txt
+*.log
+*.conf
+*.sh
+*.bat
+/temp_classes.zip
+/temp_pjsua2.zip
+/bcg729/
+/bcg729-android-arm64/
+/temp_classes_jar/

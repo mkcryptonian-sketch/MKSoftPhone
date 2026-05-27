@@ -36,6 +36,7 @@ class SipService : Service(), android.hardware.SensorEventListener {
 
         const val ACTION_SHOW_INCOMING_CALL_UI = "com.mksoft.phone.service.SHOW_INCOMING_CALL_UI"
         const val ACTION_HIDE_INCOMING_CALL_UI = "com.mksoft.phone.service.HIDE_INCOMING_CALL_UI"
+        const val ACTION_SHOW_MISSED_CALL = "com.mksoft.phone.service.SHOW_MISSED_CALL"
         const val EXTRA_CALL_ID = "com.mksoft.phone.service.extra.CALL_ID"
         const val EXTRA_PEER_URI = "com.mksoft.phone.service.extra.PEER_URI"
         
@@ -89,6 +90,41 @@ class SipService : Service(), android.hardware.SensorEventListener {
                 proximityWakeLock = powerManager.newWakeLock(PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK, "VoIPApp::ProximityWakeLock")
             }
         }
+        
+        observeSettingsChanges()
+    }
+
+    private fun observeSettingsChanges() {
+        val repository = DefaultDataRepository.getInstance(applicationContext)
+        serviceScope.launch {
+            var lastSettings = repository.settings.value
+            repository.settings.collect { newSettings ->
+                Log.d(TAG, "Settings changed: $newSettings")
+                
+                // 1. WakeLock / WiFi Lock
+                if (newSettings.wakeLockEnabled != lastSettings.wakeLockEnabled) {
+                    Log.d(TAG, "wakeLockEnabled changed to ${newSettings.wakeLockEnabled}. Re-applying locks.")
+                    releaseLocks()
+                    acquireLocks()
+                }
+                
+                // 2. Audio Config (AEC/AGC)
+                if ((newSettings.aecEnabled != lastSettings.aecEnabled) || 
+                    (newSettings.agcEnabled != lastSettings.agcEnabled)) {
+                    Log.d(TAG, "AEC/AGC settings changed. Triggering engine update.")
+                    sipEngineManager.updateMediaSettings()
+                }
+                
+                // 3. Keep-Alive Alarm
+                if (newSettings.registrationExpiry != lastSettings.registrationExpiry ||
+                    newSettings.backgroundKeepAliveEnabled != lastSettings.backgroundKeepAliveEnabled) {
+                    Log.d(TAG, "Keep-alive settings changed. Re-scheduling alarm.")
+                    scheduleKeepAliveAlarm()
+                }
+
+                lastSettings = newSettings
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -116,6 +152,20 @@ class SipService : Service(), android.hardware.SensorEventListener {
                 if (callId != -1) {
                     lastActiveIncomingCallId = callId
                     ringtoneManager.startRinging()
+                    
+                    // Force the screen to turn on
+                    try {
+                        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+                        @Suppress("DEPRECATION")
+                        val screenWakeLock = pm.newWakeLock(
+                            PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP or PowerManager.ON_AFTER_RELEASE,
+                            "VoIPApp::IncomingCallScreenWakeLock"
+                        )
+                        screenWakeLock.acquire(10000L) // 10 seconds screen wake
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to acquire screen wake lock: ${e.message}")
+                    }
+                    
                     showIncomingCallNotification(callId, peerUri)
                 }
             }
@@ -131,6 +181,10 @@ class SipService : Service(), android.hardware.SensorEventListener {
             }
             ACTION_SCHEDULE_ALARM -> {
                 scheduleKeepAliveAlarm()
+            }
+            ACTION_SHOW_MISSED_CALL -> {
+                val peerUri = intent.getStringExtra(EXTRA_PEER_URI) ?: ""
+                showMissedCallNotification(peerUri)
             }
             ACTION_STOP -> {
                 cancelKeepAliveAlarm()
@@ -162,6 +216,18 @@ class SipService : Service(), android.hardware.SensorEventListener {
     }
 
     private fun acquireLocks() {
+        val repository = DefaultDataRepository.getInstance(applicationContext)
+        val settings = repository.settings.value
+        if (!settings.wakeLockEnabled) {
+            Log.d(TAG, "Permanent WakeLock and WifiLock are disabled in settings; skipping acquisition.")
+            val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+            // High performance lock will be acquired only during active calls to save battery
+            highPerfWifiLock = wifiManager.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "VoIPApp::SipServiceHighPerfLock").apply {
+                setReferenceCounted(false)
+            }
+            return
+        }
+
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
         wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "VoIPApp::SipServiceWakeLock").apply {
             setReferenceCounted(false)
@@ -214,9 +280,21 @@ class SipService : Service(), android.hardware.SensorEventListener {
                 enableVibration(false)
             }
             
+            val missedChannel = NotificationChannel(
+                "MissedCallChannel",
+                "Missed Calls",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Notifications for missed VoIP calls"
+                enableLights(true)
+                lightColor = android.graphics.Color.RED
+                enableVibration(true)
+            }
+            
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(serviceChannel)
             manager.createNotificationChannel(callChannel)
+            manager.createNotificationChannel(missedChannel)
         }
     }
 
@@ -335,6 +413,7 @@ class SipService : Service(), android.hardware.SensorEventListener {
     }
 
     private fun observeActiveCallsForProximity() {
+        val repository = DefaultDataRepository.getInstance(applicationContext)
         serviceScope.launch {
             sipEngineManager.activeCalls.collect { calls ->
                 val hasActiveCall = calls.values.any { 
@@ -343,8 +422,10 @@ class SipService : Service(), android.hardware.SensorEventListener {
                     it.callState == SipCallState.Incoming 
                 }
                 
+                val proximityEnabled = repository.settings.value.proximitySensorEnabled
+
                 // Handle Proximity
-                if (hasActiveCall) {
+                if (hasActiveCall && proximityEnabled) {
                     registerProximitySensor()
                 } else {
                     unregisterProximitySensor()
@@ -389,15 +470,19 @@ class SipService : Service(), android.hardware.SensorEventListener {
         if (event == null) return
         val distance = event.values[0]
         val maxRange = proximitySensor?.maximumRange ?: 5f
-        if (distance < maxRange) {
+        
+        // standard threshold is often 5cm, but some sensors only report 0/maxRange
+        val isNear = distance < maxRange && distance < 5f 
+        
+        if (isNear) {
             if (proximityWakeLock?.isHeld == false) {
-                proximityWakeLock?.acquire(10 * 60 * 1000L)
-                Log.d(TAG, "Proximity near: Screen Off")
+                proximityWakeLock?.acquire()
+                Log.d(TAG, "Proximity NEAR (dist=$distance): Screen OFF")
             }
         } else {
             if (proximityWakeLock?.isHeld == true) {
                 proximityWakeLock?.release()
-                Log.d(TAG, "Proximity far: Screen Restored")
+                Log.d(TAG, "Proximity FAR (dist=$distance): Screen ON")
             }
         }
     }
@@ -421,6 +506,10 @@ class SipService : Service(), android.hardware.SensorEventListener {
             // Calculate interval: half of registration expiry
             // For push accounts, SipEngineManager sets timeoutSec to 600s
             val hasPushAccounts = repository.accounts.value.any { it.isPushEnabled }
+            if (hasPushAccounts && !settings.backgroundKeepAliveEnabled) {
+                Log.d(TAG, "Push accounts active and backgroundKeepAliveEnabled is false; skipping keep-alive alarm scheduling.")
+                return
+            }
             val expiry = if (hasPushAccounts) 600 else settings.registrationExpiry
             val intervalMs = expiry * 1000L / 2
             val triggerAtMs = System.currentTimeMillis() + intervalMs
@@ -548,6 +637,49 @@ class SipService : Service(), android.hardware.SensorEventListener {
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.cancel(callId)
         Log.d(TAG, "Cancelled incoming call notification for callId: $callId")
+    }
+
+    private fun showMissedCallNotification(peerUri: String) {
+        val cleanPeerUri = if (peerUri.startsWith("sip:")) peerUri.substring(4) else peerUri
+        
+        // Target MainActivity for tapping the notification
+        val mainActivityClass = try {
+            Class.forName("com.mksoft.phone.MainActivity")
+        } catch (e: Exception) {
+            null
+        }
+
+        val pendingIntent = if (mainActivityClass != null) {
+            val intent = Intent(this, mainActivityClass).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                putExtra("navigate_to", "history")
+            }
+            PendingIntent.getActivity(
+                this,
+                System.currentTimeMillis().toInt(),
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        } else {
+            null
+        }
+
+        val notification = NotificationCompat.Builder(this, "MissedCallChannel")
+            .setContentTitle("Missed Call")
+            .setContentText(cleanPeerUri)
+            .setSmallIcon(android.R.drawable.stat_notify_missed_call)
+            .setColor(android.graphics.Color.RED)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_MISSED_CALL)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC) // Make it visible on lockscreen
+            .build()
+
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val notificationId = peerUri.hashCode()
+        manager.notify(notificationId, notification)
+        Log.d(TAG, "Showed missed call notification for: $cleanPeerUri")
     }
 }
 

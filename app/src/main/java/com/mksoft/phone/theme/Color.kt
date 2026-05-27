@@ -1,68 +1,67 @@
-package com.mksoft.phone.theme
+﻿package com.mksoft.phone.theme
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 
-// Gemini Space Neural Expressive color palette
+// Forest / Autumn Expressive color palette
+// Combination of Red, Green, Olive Green, Orange, and White
 
 // Dark Theme Colors
-val GeminiPrimaryDark = Color(0xFF9BBFFF)
-val GeminiOnPrimaryDark = Color(0xFF002D69)
-val GeminiPrimaryContainerDark = Color(0xFF1D438A)
-val GeminiOnPrimaryContainerDark = Color(0xFFD7E2FF)
+val GeminiPrimaryDark = Color(0xFF9CCC65) // Light Olive Green
+val GeminiOnPrimaryDark = Color(0xFF1B3D00)
+val GeminiPrimaryContainerDark = Color(0xFF33691E) // Dark Olive Green
+val GeminiOnPrimaryContainerDark = Color(0xFFDCEDC8)
 
-val GeminiSecondaryDark = Color(0xFFC2BAFF)
-val GeminiOnSecondaryDark = Color(0xFF2B1D6D)
-val GeminiSecondaryContainerDark = Color(0xFF423485)
-val GeminiOnSecondaryContainerDark = Color(0xFFE5DEFF)
+val GeminiSecondaryDark = Color(0xFFFFB74D) // Orange
+val GeminiOnSecondaryDark = Color(0xFF4E2C00)
+val GeminiSecondaryContainerDark = Color(0xFFE65100) // Deep Orange
+val GeminiOnSecondaryContainerDark = Color(0xFFFFE0B2)
 
-val GeminiTertiaryDark = Color(0xFFF5B6E6)
-val GeminiOnTertiaryDark = Color(0xFF4D1C41)
-val GeminiTertiaryContainerDark = Color(0xFF683359)
-val GeminiOnTertiaryContainerDark = Color(0xFFFFD7F3)
+val GeminiTertiaryDark = Color(0xFFEF5350) // Red
+val GeminiOnTertiaryDark = Color(0xFF4A0002)
+val GeminiTertiaryContainerDark = Color(0xFFB71C1C) // Dark Red
+val GeminiOnTertiaryContainerDark = Color(0xFFFFEBEE)
 
-val GeminiBackgroundDark = Color(0xFF06070B) // Deep space black-blue
-val GeminiOnBackgroundDark = Color(0xFFE2E2E9)
-val GeminiSurfaceDark = Color(0xFF0E101A) // Dark glass slate
-val GeminiOnSurfaceDark = Color(0xFFE2E2E9)
-val GeminiSurfaceVariantDark = Color(0xFF191C2B)
-val GeminiOnSurfaceVariantDark = Color(0xFFC4C6D0)
+val GeminiBackgroundDark = Color(0xFF0F150E) // Very Dark Olive/Charcoal
+val GeminiOnBackgroundDark = Color(0xFFFFFFFF) // White
+val GeminiSurfaceDark = Color(0xFF162015) // Dark Olive Slate
+val GeminiOnSurfaceDark = Color(0xFFFFFFFF) // White
+val GeminiSurfaceVariantDark = Color(0xFF283626) // Olive Slate
+val GeminiOnSurfaceVariantDark = Color(0xFFC7D3C5) // Light Olive Gray
 
-// Light Theme Colors (Clean pastel neon fallback)
-val GeminiPrimaryLight = Color(0xFF1B5CB7)
-val GeminiOnPrimaryLight = Color(0xFFFFFFFF)
-val GeminiPrimaryContainerLight = Color(0xFFD7E2FF)
-val GeminiOnPrimaryContainerLight = Color(0xFF001B3F)
+// Light Theme Colors (Clean autumn fallback)
+val GeminiPrimaryLight = Color(0xFF558B2F) // Olive Green
+val GeminiOnPrimaryLight = Color(0xFFFFFFFF) // White
+val GeminiPrimaryContainerLight = Color(0xFFDCEDC8)
+val GeminiOnPrimaryContainerLight = Color(0xFF1B3D00)
 
-val GeminiSecondaryLight = Color(0xFF5A4D9A)
-val GeminiOnSecondaryLight = Color(0xFFFFFFFF)
-val GeminiSecondaryContainerLight = Color(0xFFE5DEFF)
-val GeminiOnSecondaryContainerLight = Color(0xFF160350)
+val GeminiSecondaryLight = Color(0xFFF57C00) // Orange
+val GeminiOnSecondaryLight = Color(0xFFFFFFFF) // White
+val GeminiSecondaryContainerLight = Color(0xFFFFE0B2)
+val GeminiOnSecondaryContainerLight = Color(0xFF4E2C00)
 
-val GeminiTertiaryLight = Color(0xFF834B73)
-val GeminiOnTertiaryLight = Color(0xFFFFFFFF)
-val GeminiTertiaryContainerLight = Color(0xFFFFD7F3)
-val GeminiOnTertiaryContainerLight = Color(0xFF35072B)
+val GeminiTertiaryLight = Color(0xFFD32F2F) // Red
+val GeminiOnTertiaryLight = Color(0xFFFFFFFF) // White
+val GeminiTertiaryContainerLight = Color(0xFFFFEBEE)
+val GeminiOnTertiaryContainerLight = Color(0xFF4A0002)
 
-val GeminiBackgroundLight = Color(0xFFF8F9FF)
-val GeminiOnBackgroundLight = Color(0xFF191C20)
-val GeminiSurfaceLight = Color(0xFFF8F9FF)
-val GeminiOnSurfaceLight = Color(0xFF191C20)
-val GeminiSurfaceVariantLight = Color(0xFFE2E2EC)
-val GeminiOnSurfaceVariantLight = Color(0xFF44474E)
+val GeminiBackgroundLight = Color(0xFFFAFDFA) // Off-white green
+val GeminiOnBackgroundLight = Color(0xFF1A1C19)
+val GeminiSurfaceLight = Color(0xFFFAFDFA)
+val GeminiOnSurfaceLight = Color(0xFF1A1C19)
+val GeminiSurfaceVariantLight = Color(0xFFDFE4DD)
+val GeminiOnSurfaceVariantLight = Color(0xFF434840)
 
-// Gemini signature neural flow gradient brush
-val GeminiBlue = Color(0xFF4285F4)
-val GeminiPurple = Color(0xFF9B72CB)
-val GeminiPink = Color(0xFFD96570)
+// Signature glow gradient brush (Olive, Orange, Red)
+val GeminiBlue = Color(0xFF9CCC65) // Olive
+val GeminiPurple = Color(0xFFFF9800) // Orange
+val GeminiPink = Color(0xFFF44336) // Red
 val GeminiGlowBrush = Brush.linearGradient(
     colors = listOf(GeminiBlue, GeminiPurple, GeminiPink)
 )
 
 // Premium UI Specific Colors
-val DialerCallGreen = Color(0xFF10B981)
-val DialerEndRed = Color(0xFFEF4444)
-val GlassBg = Color(0x0CFFFFFF)
-val GlassBorder = Color(0x1AFFFFFF)
-
-
+val DialerCallGreen = Color(0xFF4CAF50) // Bright Green
+val DialerEndRed = Color(0xFFF44336) // Bright Red
+val GlassBg = Color(0x1AFFFFFF) // White glass
+val GlassBorder = Color(0x33FFFFFF) // White border

@@ -55,7 +55,12 @@ class SipFirebaseMessagingService : FirebaseMessagingService() {
     }
 
     /**
-     * Wakes the foreground system context, ensures CPU longevity, and invokes PJSIP registration
+     * Wakes the SIP engine so it can receive the incoming SIP INVITE.
+     * 
+     * We do NOT call addNewIncomingCall here. The actual TelecomManager notification
+     * and full-screen UI are triggered by SipEngineManager.onCallStateChanged when the
+     * real SIP INVITE is received. Calling addNewIncomingCall prematurely (before the
+     * INVITE arrives) caused a phantom connection with callId=-1 that auto-answered calls.
      */
     private fun handleIncomingCallWakeup(context: Context, peerUri: String) {
         val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
@@ -66,43 +71,39 @@ class SipFirebaseMessagingService : FirebaseMessagingService() {
 
         // Secure a temporary execution window to beat Android Doze/App Standby loops
         wakeLock.acquire(WAKE_LOCK_TIMEOUT_MS)
-        Log.d(TAG, "Acquired partial CPU WakeLock ($peerUri) for re-registration pipeline")
+        Log.d(TAG, "Acquired partial CPU WakeLock for push wakeup from: $peerUri")
 
-        try {
-            // Re-initialize engine state if necessary
-            if (sipEngineManager.engineState.value is SipEngineState.Uninitialized) {
-                Log.d(TAG, "Engine uninitialized during push, starting SipService...")
-                SipService.start(context)
-            }
-
-            // Android 14+ Telecom integration
-            val telecomManager = context.getSystemService(Context.TELECOM_SERVICE) as android.telecom.TelecomManager
-            val phoneAccountHandle = VoIpConnectionService.getPhoneAccountHandle(context)
-            val extras = android.os.Bundle().apply {
-                putInt("callId", -1) 
-                putString("peerUri", peerUri) 
-            }
-            val incomingCallExtras = android.os.Bundle().apply {
-                putParcelable(android.telecom.TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, phoneAccountHandle)
-                putBundle(android.telecom.TelecomManager.EXTRA_INCOMING_CALL_EXTRAS, extras)
-            }
+        serviceScope.launch {
             try {
-                telecomManager.addNewIncomingCall(phoneAccountHandle, incomingCallExtras)
-                Log.d(TAG, "Notified TelecomManager of incoming call from $peerUri")
-            } catch (e: Exception) {
-                Log.e(TAG, "Error adding incoming call to TelecomManager: ${e.message}. Showing fallback notification.")
-                showFallbackIncomingCallNotification(context, peerUri)
-            }
+                // Start/wake SipService so Linphone engine is running and can receive the INVITE
+                Log.d(TAG, "Starting SipService to wake Linphone engine for incoming call from: $peerUri")
+                SipService.start(context)
 
-            // Ensure SIP engine is active and registering
-            serviceScope.launch {
-                sipEngineManager.syncActiveAccountRegistrations()
+                // Wait briefly for engine to become ready then re-register all accounts
+                // This ensures our SIP registration is active when the INVITE arrives
+                withTimeoutOrNull(10_000L) {
+                    while (sipEngineManager.engineState.value !is SipEngineState.Ready) {
+                        delay(200)
+                    }
+                }
+
+                if (sipEngineManager.engineState.value is SipEngineState.Ready) {
+                    Log.d(TAG, "Engine ready. Syncing account registrations to receive incoming INVITE...")
+                    sipEngineManager.syncActiveAccountRegistrations()
+                    Log.d(TAG, "Account registration sync complete. Waiting for SIP INVITE...")
+                    // The actual incoming call UI will be triggered by SipEngineManager.onCallStateChanged
+                    // when the SIP INVITE arrives from the server after our re-registration.
+                } else {
+                    Log.w(TAG, "Engine did not become ready in time. Showing fallback notification.")
+                    showFallbackIncomingCallNotification(context, peerUri)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Fatal error in push wakeup handler", e)
+                showFallbackIncomingCallNotification(context, peerUri)
+            } finally {
+                if (wakeLock.isHeld) wakeLock.release()
+                Log.d(TAG, "Released execution CPU WakeLock cleanly")
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Fatal error executing TelecomManager incoming call sequence", e)
-        } finally {
-            if (wakeLock.isHeld) wakeLock.release()
-            Log.d(TAG, "Released execution CPU WakeLock cleanly")
         }
     }
 

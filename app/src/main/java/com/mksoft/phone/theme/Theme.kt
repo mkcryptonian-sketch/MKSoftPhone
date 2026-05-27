@@ -50,7 +50,7 @@ private val LightColorScheme = lightColorScheme(
 
 @Composable
 fun VoIPAppTheme(
-    darkTheme: Boolean = true, // Force dark theme for a premium, professional appearance
+    darkTheme: Boolean = false, // Force light theme by default
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit,
 ) {

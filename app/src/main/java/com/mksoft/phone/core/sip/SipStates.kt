@@ -1,5 +1,7 @@
 package com.mksoft.phone.core.sip
 
+import kotlinx.serialization.Serializable
+
 sealed interface SipEngineState {
     object Uninitialized : SipEngineState
     object Initializing : SipEngineState
@@ -51,6 +53,62 @@ data class CallWrapper(
     val isSpeakerphoneOn: Boolean = false,
     val isBluetoothOn: Boolean = false,
     val connectTimestamp: Long? = null,
-    val isIncoming: Boolean = false
+    val isIncoming: Boolean = false,
+    val isThirdParty: Boolean = false
 )
 
+enum class SecurityLevel {
+    NONE,       // Plain RTP, no encryption
+    SRTP,       // SRTP with SDES key exchange
+    DTLS_SRTP,  // SRTP with DTLS-SRTP key exchange (more secure)
+    ZRTP        // ZRTP-negotiated media key (highest security)
+}
+
+data class CallStats(
+    val callId: Int,
+    // Security
+    val securityLevel: SecurityLevel = SecurityLevel.NONE,
+    val securityProto: String = "RTP/AVP",
+    val localRtpAddress: String = "",
+    val remoteRtpAddress: String = "",
+    // Codec
+    val codecName: String = "Unknown",
+    val clockRate: Long = 0,
+    // TX stats
+    val txPackets: Long = 0,
+    val txBytes: Long = 0,
+    val txLoss: Long = 0,
+    val txJitterMs: Int = 0,   // mean jitter µs -> ms
+    // RX stats
+    val rxPackets: Long = 0,
+    val rxBytes: Long = 0,
+    val rxLoss: Long = 0,
+    val rxJitterMs: Int = 0,
+    val rxDiscard: Long = 0,
+    // Round-trip time
+    val rttMs: Int = 0,        // mean RTT µs -> ms
+    // Jitter buffer
+    val jbAvgDelayMs: Long = 0,
+    val jbMaxDelayMs: Long = 0,
+    val jbCurrentSize: Long = 0,
+    // Quality score 0-100 (estimated)
+    val qualityScore: Int = 100,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+@Serializable
+data class SipChatMessage(
+    val id: String,
+    val peerUri: String,
+    val content: String,
+    val timestamp: Long,
+    val isIncoming: Boolean,
+    val isRead: Boolean = false,
+    val status: MessageStatus = MessageStatus.Delivered
+)
+
+enum class MessageStatus {
+    Sending,
+    Delivered,
+    Failed
+}

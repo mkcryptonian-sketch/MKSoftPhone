@@ -11,7 +11,7 @@ class CallHistoryDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE
     companion object {
         private const val TAG = "CallHistoryDbHelper"
         private const val DATABASE_NAME = "call_history.db"
-        private const val DATABASE_VERSION = 1
+        private const val DATABASE_VERSION = 2
 
         const val TABLE_CALLS = "call_ledger"
         const val COLUMN_ID = "id"
@@ -20,6 +20,7 @@ class CallHistoryDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE
         const val COLUMN_DURATION = "duration"
         const val COLUMN_IS_INCOMING = "is_incoming"
         const val COLUMN_WAS_ANSWERED = "was_answered"
+        const val COLUMN_IS_THIRD_PARTY = "is_third_party"
 
         private const val CREATE_TABLE_CALLS = """
             CREATE TABLE $TABLE_CALLS (
@@ -28,7 +29,8 @@ class CallHistoryDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE
                 $COLUMN_TIMESTAMP INTEGER NOT NULL,
                 $COLUMN_DURATION INTEGER NOT NULL,
                 $COLUMN_IS_INCOMING INTEGER NOT NULL,
-                $COLUMN_WAS_ANSWERED INTEGER NOT NULL
+                $COLUMN_WAS_ANSWERED INTEGER NOT NULL,
+                $COLUMN_IS_THIRD_PARTY INTEGER NOT NULL DEFAULT 0
             )
         """
     }
@@ -43,7 +45,15 @@ class CallHistoryDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        Log.d(TAG, "onUpgrade: oldVersion=$oldVersion, newVersion=$newVersion. No migrations needed yet.")
+        Log.d(TAG, "onUpgrade: oldVersion=$oldVersion, newVersion=$newVersion")
+        if (oldVersion < 2) {
+            try {
+                db.execSQL("ALTER TABLE $TABLE_CALLS ADD COLUMN $COLUMN_IS_THIRD_PARTY INTEGER NOT NULL DEFAULT 0")
+                Log.d(TAG, "Successfully added $COLUMN_IS_THIRD_PARTY column to $TABLE_CALLS")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error upgrading database: ${e.message}", e)
+            }
+        }
     }
 
     fun insertCall(entry: CallHistoryEntry): Boolean {
@@ -56,6 +66,7 @@ class CallHistoryDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE
                 put(COLUMN_DURATION, entry.duration)
                 put(COLUMN_IS_INCOMING, if (entry.isIncoming) 1 else 0)
                 put(COLUMN_WAS_ANSWERED, if (entry.wasAnswered) 1 else 0)
+                put(COLUMN_IS_THIRD_PARTY, if (entry.isThirdParty) 1 else 0)
             }
             val result = db.insert(TABLE_CALLS, null, values)
             if (result == -1L) {
@@ -91,6 +102,7 @@ class CallHistoryDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE
                 val durIdx = c.getColumnIndexOrThrow(COLUMN_DURATION)
                 val incIdx = c.getColumnIndexOrThrow(COLUMN_IS_INCOMING)
                 val ansIdx = c.getColumnIndexOrThrow(COLUMN_WAS_ANSWERED)
+                val tpIdx = c.getColumnIndexOrThrow(COLUMN_IS_THIRD_PARTY)
 
                 while (c.moveToNext()) {
                     list.add(
@@ -100,7 +112,8 @@ class CallHistoryDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE
                             timestamp = c.getLong(timeIdx),
                             duration = c.getLong(durIdx),
                             isIncoming = c.getInt(incIdx) == 1,
-                            wasAnswered = c.getInt(ansIdx) == 1
+                            wasAnswered = c.getInt(ansIdx) == 1,
+                            isThirdParty = c.getInt(tpIdx) == 1
                         )
                     )
                 }

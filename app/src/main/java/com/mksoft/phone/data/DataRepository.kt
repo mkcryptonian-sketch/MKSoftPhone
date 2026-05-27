@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import com.mksoft.phone.core.sip.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,7 +22,8 @@ data class CallHistoryEntry(
     val timestamp: Long,
     val duration: Long, // in seconds
     val isIncoming: Boolean,
-    val wasAnswered: Boolean
+    val wasAnswered: Boolean,
+    val isThirdParty: Boolean = false
 )
 
 @Serializable
@@ -46,7 +48,42 @@ data class VoIpSettings(
     /**
      * The SIP domain that is hosted directly on this device's proxy server.
      */
-    val localDomain: String = ""
+    val localDomain: String = "",
+    val aecEnabled: Boolean = true,
+    val agcEnabled: Boolean = true,
+    val wakeLockEnabled: Boolean = false,
+    val backgroundKeepAliveEnabled: Boolean = false,
+    
+    // New Advanced Settings
+    val transportProtocol: String = "TLS", // TLS, TCP, UDP
+    val turnServer: String = "",
+    val iceEnabled: Boolean = true,
+    val keepAliveInterval: Int = 30, // seconds
+    val rportEnabled: Boolean = true,
+    val ipv6Preference: String = "Dual-stack", // "Force IPv4", "Force IPv6", "Dual-stack"
+    val dtmfMethod: String = "RFC 2833", // "RFC 2833", "SIP INFO", "In-band"
+    val echoCancellationType: String = "Hardware", // "Hardware", "Software"
+    val nativeCallIntegrationEnabled: Boolean = true,
+    val pushNotificationsEnabled: Boolean = true,
+    val dndSyncEnabled: Boolean = false,
+    val globalCodecs: List<SipCodecConfig> = emptyList(),
+
+    // Enterprise & Media Settings
+    val attendedTransferEnabled: Boolean = true,
+    val blfEnabled: Boolean = false,
+    val videoEnabled: Boolean = false,
+    val limeEnabled: Boolean = false,
+    val proximitySensorEnabled: Boolean = true,
+    val zrtpSasDisplayEnabled: Boolean = true,
+    val sipMessagingEnabled: Boolean = true,
+    val postQuantumEnabled: Boolean = false
+)
+
+@Serializable
+data class SipCodecConfig(
+    val id: String, // e.g. "opus/48000/2", "G729/8000/1"
+    val enabled: Boolean,
+    val priority: Int
 )
 
 @Serializable
@@ -68,6 +105,17 @@ data class SipAccountConfig(
     val pcmaPriority: Int = 128,
     val g722Priority: Int = 128,
     val gsmPriority: Int = 128,
+    val g729Priority: Int = 128,
+    val speexPriority: Int = 128,
+    val amrPriority: Int = 128,
+    val opusEnabled: Boolean = true,
+    val pcmuEnabled: Boolean = true,
+    val pcmaEnabled: Boolean = true,
+    val g722Enabled: Boolean = true,
+    val gsmEnabled: Boolean = false,
+    val g729Enabled: Boolean = true,
+    val speexEnabled: Boolean = false,
+    val amrEnabled: Boolean = false,
     val fcmToken: String = "",
     val packageName: String = "",
     val isEnabled: Boolean = true,
@@ -77,8 +125,34 @@ data class SipAccountConfig(
      * instance ID survives app restarts. An empty value means "not yet assigned";
      * the SIP engine will generate a fresh UUID and persist it before registering.
      */
-    val sipInstanceId: String = ""
-)
+    val sipInstanceId: String = "",
+    val codecs: List<SipCodecConfig> = emptyList()
+) {
+    fun getNormalizedCodecs(globalCodecs: List<SipCodecConfig> = emptyList()): List<SipCodecConfig> {
+        val baseCodecs = if (globalCodecs.isNotEmpty()) globalCodecs else codecs
+        if (baseCodecs.isNotEmpty()) return baseCodecs
+        
+        // Legacy migration & initialization with best-quality-first defaults:
+        return listOf(
+            SipCodecConfig("opus/48000/2", opusEnabled, if (opusPriority == 128) 200 else opusPriority),
+            SipCodecConfig("G722/16000/1", g722Enabled, if (g722Priority == 128) 190 else g722Priority),
+            SipCodecConfig("G729/8000/1", g729Enabled, if (g729Priority == 128) 180 else g729Priority),
+            SipCodecConfig("PCMU/8000/1", pcmuEnabled, if (pcmuPriority == 128) 170 else pcmuPriority),
+            SipCodecConfig("PCMA/8000/1", pcmaEnabled, if (pcmaPriority == 128) 160 else pcmaPriority),
+            SipCodecConfig("AMR-WB/16000/1", false, 150),
+            SipCodecConfig("AMR/8000/1", amrEnabled, if (amrPriority == 128) 140 else amrPriority),
+            SipCodecConfig("speex/16000/1", speexEnabled, if (speexPriority == 128) 130 else speexPriority),
+            SipCodecConfig("speex/32000/1", false, 120),
+            SipCodecConfig("speex/8000/1", false, 110),
+            SipCodecConfig("iLBC/8000/1", false, 100),
+            SipCodecConfig("GSM/8000/1", gsmEnabled, if (gsmPriority == 128) 90 else gsmPriority),
+            SipCodecConfig("G7221/16000/1", false, 80),
+            SipCodecConfig("G7221/32000/1", false, 70),
+            SipCodecConfig("L16/16000/1", false, 60),
+            SipCodecConfig("L16/8000/1", false, 50)
+        ).sortedByDescending { it.priority }
+    }
+}
 
 interface DataRepository {
     val callHistory: Flow<List<CallHistoryEntry>>
@@ -86,6 +160,7 @@ interface DataRepository {
     val settings: Flow<VoIpSettings>
     val accounts: Flow<List<SipAccountConfig>>
     val primaryAccountId: Flow<String?>
+    val messages: Flow<List<SipChatMessage>>
     
     fun addCallHistory(entry: CallHistoryEntry)
     fun clearCallHistory()
@@ -98,6 +173,9 @@ interface DataRepository {
     fun setPrimaryAccountId(accountId: String?)
     fun saveFcmToken(token: String)
     fun getFcmToken(): String?
+    fun addChatMessage(message: SipChatMessage)
+    fun markMessagesAsRead(peerUri: String)
+    fun clearChatHistory(peerUri: String)
 }
 
 class DefaultDataRepository private constructor(private val context: Context) : DataRepository {
@@ -145,6 +223,9 @@ class DefaultDataRepository private constructor(private val context: Context) : 
     private val _accounts = MutableStateFlow<List<SipAccountConfig>>(emptyList())
     override val accounts = _accounts.asStateFlow()
 
+    private val _messages = MutableStateFlow<List<SipChatMessage>>(emptyList())
+    override val messages = _messages.asStateFlow()
+
     private val _primaryAccountId = MutableStateFlow<String?>(null)
     override val primaryAccountId = _primaryAccountId.asStateFlow()
 
@@ -154,6 +235,7 @@ class DefaultDataRepository private constructor(private val context: Context) : 
             "primary_account_id" -> loadPrimaryAccountId()
             "settings" -> loadSettings()
             "contacts" -> loadContacts()
+            "chat_messages" -> loadMessages()
         }
     }
     
@@ -164,6 +246,7 @@ class DefaultDataRepository private constructor(private val context: Context) : 
         loadSettings()
         loadAccounts()
         loadPrimaryAccountId()
+        loadMessages()
         prefs.registerOnSharedPreferenceChangeListener(preferenceChangeListener)
         securePrefs.registerOnSharedPreferenceChangeListener(preferenceChangeListener)
     }
@@ -292,6 +375,40 @@ class DefaultDataRepository private constructor(private val context: Context) : 
         securePrefs.edit().putString("sip_accounts", json.encodeToString(list)).commit()
     }
     
+    private fun loadMessages() {
+        val jsonStr = prefs.getString("chat_messages", null)
+        if (jsonStr != null) {
+            try {
+                _messages.value = json.decodeFromString<List<SipChatMessage>>(jsonStr)
+            } catch (e: Exception) {
+                _messages.value = emptyList()
+            }
+        }
+    }
+
+    private fun saveMessages(list: List<SipChatMessage>) {
+        _messages.value = list
+        prefs.edit().putString("chat_messages", json.encodeToString(list)).apply()
+    }
+
+    override fun addChatMessage(message: SipChatMessage) {
+        val current = _messages.value.toMutableList()
+        current.add(message)
+        saveMessages(current)
+    }
+
+    override fun markMessagesAsRead(peerUri: String) {
+        val current = _messages.value.map {
+            if (it.peerUri == peerUri && !it.isRead) it.copy(isRead = true) else it
+        }
+        saveMessages(current)
+    }
+
+    override fun clearChatHistory(peerUri: String) {
+        val current = _messages.value.filter { it.peerUri != peerUri }
+        saveMessages(current)
+    }
+
     override fun addSipAccount(account: SipAccountConfig) {
         val current = _accounts.value.toMutableList()
         current.removeAll { it.id == account.id }

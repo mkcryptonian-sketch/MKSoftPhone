@@ -84,19 +84,11 @@ fun LoginScreen(
         }
     }
 
-    // Gorgeous gradient background (Gemini Space)
+    // Gorgeous dynamic background using theme's color scheme
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0xFF06070B),
-                        Color(0xFF0F1221),
-                        Color(0xFF06070B)
-                    )
-                )
-            ),
+            .background(MaterialTheme.colorScheme.background),
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -110,7 +102,7 @@ fun LoginScreen(
                 modifier = Modifier
                     .size(96.dp)
                     .clip(RoundedCornerShape(24.dp))
-                    .background(Color(0x10FFFFFF)),
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -129,7 +121,7 @@ fun LoginScreen(
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 0.5.sp
                 ),
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onBackground,
                 textAlign = TextAlign.Center
             )
 
@@ -138,24 +130,24 @@ fun LoginScreen(
             Text(
                 text = stringResource(R.string.login_subtitle),
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color.White.copy(alpha = 0.6f),
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
                 textAlign = TextAlign.Center
             )
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            // Login Input Card (Glassmorphic look)
+            // Login Input Card
             Card(
                 shape = RoundedCornerShape(28.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = Color.White.copy(alpha = 0.04f)
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
                 ),
                 modifier = Modifier.fillMaxWidth(),
                 border = CardDefaults.outlinedCardBorder().copy(
                     brush = Brush.linearGradient(
                         colors = listOf(
-                            Color.White.copy(alpha = 0.12f),
-                            Color.White.copy(alpha = 0.01f)
+                            MaterialTheme.colorScheme.onBackground.copy(alpha = 0.12f),
+                            MaterialTheme.colorScheme.onBackground.copy(alpha = 0.01f)
                         )
                     )
                 )
@@ -173,12 +165,12 @@ fun LoginScreen(
                             username = it
                             isError = false
                         },
-                        label = { Text(stringResource(R.string.login_username_label), color = Color.White.copy(alpha = 0.6f)) },
+                        label = { Text(stringResource(R.string.login_username_label), color = MaterialTheme.colorScheme.onSurfaceVariant) },
                         leadingIcon = {
                             Icon(
                                 imageVector = Icons.Filled.Person,
                                 contentDescription = null,
-                                tint = Color.White.copy(alpha = 0.6f)
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         },
                         singleLine = true,
@@ -188,11 +180,11 @@ fun LoginScreen(
                             imeAction = ImeAction.Next
                         ),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
-                            focusedBorderColor = GeminiPrimaryDark,
-                            unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
-                            cursorColor = GeminiPrimaryDark
+                            focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                            cursorColor = MaterialTheme.colorScheme.primary
                         ),
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -206,12 +198,12 @@ fun LoginScreen(
                             password = it
                             isError = false
                         },
-                        label = { Text(stringResource(R.string.login_password_label), color = Color.White.copy(alpha = 0.6f)) },
+                        label = { Text(stringResource(R.string.login_password_label), color = MaterialTheme.colorScheme.onSurfaceVariant) },
                         leadingIcon = {
                             Icon(
                                 imageVector = Icons.Filled.Lock,
                                 contentDescription = null,
-                                tint = Color.White.copy(alpha = 0.6f)
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         },
                         trailingIcon = {
@@ -219,7 +211,7 @@ fun LoginScreen(
                                 Icon(
                                     imageVector = if (passwordVisible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
                                     contentDescription = if (passwordVisible) stringResource(R.string.login_hide_password) else stringResource(R.string.login_show_password),
-                                    tint = Color.White.copy(alpha = 0.6f)
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         },
@@ -234,11 +226,11 @@ fun LoginScreen(
                             onDone = { focusManager.clearFocus() }
                         ),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
-                            focusedBorderColor = GeminiPrimaryDark,
-                            unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
-                            cursorColor = GeminiPrimaryDark
+                            focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                            cursorColor = MaterialTheme.colorScheme.primary
                         ),
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -255,16 +247,36 @@ fun LoginScreen(
                                 RadioButton(
                                     selected = selectedTransport == transport,
                                     onClick = { selectedTransport = transport },
-                                    colors = RadioButtonDefaults.colors(selectedColor = GeminiPrimaryDark, unselectedColor = Color.White.copy(alpha = 0.6f))
+                                    colors = RadioButtonDefaults.colors(selectedColor = MaterialTheme.colorScheme.primary, unselectedColor = MaterialTheme.colorScheme.onSurfaceVariant)
                                 )
-                                Text(transport, color = Color.White, style = MaterialTheme.typography.bodyMedium)
+                                Text(transport, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium)
                             }
                         }
                     }
 
+                    var usePushProxy by remember { mutableStateOf(true) }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Enable Freedom Call", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium)
+                        Switch(
+                            checked = usePushProxy,
+                            onCheckedChange = { usePushProxy = it },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant
+                            )
+                        )
+                    }
+
                     Spacer(modifier = Modifier.height(16.dp))
-
-
 
                     AnimatedVisibility(
                         visible = isError,
@@ -306,7 +318,7 @@ fun LoginScreen(
 
                             isLoading = true
                             focusManager.clearFocus()
-                            viewModel.addSipAccount(sipUser, sipDomain, password, selectedTransport, false) {
+                            viewModel.addSipAccount(sipUser, sipDomain, password, selectedTransport, usePushProxy) {
                                 // We rely on the LaunchedEffect above to call onLoginSuccess()
                                 // when RegistrationState becomes Registered.
                                 // If it fails, we should stop loading and show error.
@@ -337,7 +349,8 @@ fun LoginScreen(
                                 style = MaterialTheme.typography.titleMedium.copy(
                                     fontWeight = FontWeight.Bold,
                                     letterSpacing = 1.25.sp
-                                )
+                                ),
+                                color = Color.White
                             )
                         }
                     }

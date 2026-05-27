@@ -52,7 +52,10 @@ class VoIpConnection(
         context.startService(serviceIntent)
     }
 
+    private var isDestroyed = false
+
     override fun onAnswer() {
+        if (isDestroyed) return
         Log.d(TAG, "onAnswer called for callId: $callId")
         try {
             hideIncomingCallUi()
@@ -79,6 +82,8 @@ class VoIpConnection(
     }
 
     override fun onReject() {
+        if (isDestroyed) return
+        isDestroyed = true
         Log.d(TAG, "onReject called for callId: $callId")
         try {
             hideIncomingCallUi()
@@ -97,6 +102,8 @@ class VoIpConnection(
     }
 
     override fun onDisconnect() {
+        if (isDestroyed) return
+        isDestroyed = true
         Log.d(TAG, "onDisconnect called for callId: $callId")
         try {
             hideIncomingCallUi()

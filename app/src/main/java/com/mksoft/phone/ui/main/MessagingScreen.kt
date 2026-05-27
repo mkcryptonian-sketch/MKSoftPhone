@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -36,43 +37,109 @@ fun MessagingScreen(
             .sortedByDescending { it.second.first().timestamp }
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        TopAppBar(
-            title = { Text("Messages", fontWeight = FontWeight.Bold) },
-            actions = {
-                IconButton(onClick = { /* TODO: Search */ }) {
-                    Icon(Icons.Default.Search, contentDescription = "Search")
-                }
-            }
-        )
+    var showNewChatDialog by remember { mutableStateOf(false) }
 
-        if (conversations.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.Chat,
-                        contentDescription = null,
-                        modifier = Modifier.size(64.dp),
-                        tint = GeminiPrimaryDark
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text("No messages yet", style = MaterialTheme.typography.bodyLarge)
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Messages", fontWeight = FontWeight.Bold) },
+                actions = {
+                    IconButton(onClick = { /* TODO: Search */ }) {
+                        Icon(Icons.Default.Search, contentDescription = "Search")
+                    }
                 }
+            )
+        },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { showNewChatDialog = true },
+                containerColor = GeminiPrimaryDark,
+                contentColor = Color.White
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "New Chat")
             }
-        } else {
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
-                items(conversations) { (peerUri, chatMessages) ->
-                    ConversationItem(
-                        peerUri = peerUri,
-                        lastMessage = chatMessages.first(),
-                        unreadCount = chatMessages.count { !it.isRead && it.isIncoming },
-                        onClick = { onChatSelected(peerUri) }
-                    )
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp)
+        }
+    ) { padding ->
+        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+            if (conversations.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.Chat,
+                            contentDescription = null,
+                            modifier = Modifier.size(64.dp),
+                            tint = GeminiPrimaryDark
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text("No messages yet", style = MaterialTheme.typography.bodyLarge)
+                    }
+                }
+            } else {
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    items(conversations) { (peerUri, chatMessages) ->
+                        ConversationItem(
+                            peerUri = peerUri,
+                            lastMessage = chatMessages.first(),
+                            unreadCount = chatMessages.count { !it.isRead && it.isIncoming },
+                            onClick = { onChatSelected(peerUri) }
+                        )
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp)
+                    }
                 }
             }
         }
     }
+
+    if (showNewChatDialog) {
+        NewChatDialog(
+            onDismiss = { showNewChatDialog = false },
+            onConfirm = { peerUri ->
+                showNewChatDialog = false
+                val formattedUri = if (peerUri.startsWith("sip:")) peerUri else "sip:$peerUri"
+                onChatSelected(formattedUri)
+            }
+        )
+    }
+}
+
+@Composable
+fun NewChatDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var peerUri by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Start New Chat") },
+        text = {
+            Column {
+                Text("Enter the SIP URI or number to chat with.", style = MaterialTheme.typography.bodyMedium)
+                Spacer(modifier = Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = peerUri,
+                    onValueChange = { peerUri = it },
+                    label = { Text("SIP URI or Number") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    placeholder = { Text("e.g. 1001 or sip:1001@domain") }
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { if (peerUri.isNotBlank()) onConfirm(peerUri) },
+                enabled = peerUri.isNotBlank()
+            ) {
+                Text("Start")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 @Composable

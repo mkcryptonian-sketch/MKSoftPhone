@@ -254,7 +254,7 @@ fun LoginScreen(
                         }
                     }
 
-                    var usePushProxy by remember { mutableStateOf(true) }
+                    var useSbc by remember { mutableStateOf(false) }
 
                     Spacer(modifier = Modifier.height(8.dp))
 
@@ -263,10 +263,10 @@ fun LoginScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Enable Freedom Call", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium)
+                        Text("SBC", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium)
                         Switch(
-                            checked = usePushProxy,
-                            onCheckedChange = { usePushProxy = it },
+                            checked = useSbc,
+                            onCheckedChange = { useSbc = it },
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
                                 checkedTrackColor = MaterialTheme.colorScheme.primary,
@@ -318,7 +318,7 @@ fun LoginScreen(
 
                             isLoading = true
                             focusManager.clearFocus()
-                            viewModel.addSipAccount(sipUser, sipDomain, password, selectedTransport, usePushProxy) {
+                            viewModel.addSipAccount(sipUser, sipDomain, password, selectedTransport, useSbc) {
                                 // We rely on the LaunchedEffect above to call onLoginSuccess()
                                 // when RegistrationState becomes Registered.
                                 // If it fails, we should stop loading and show error.

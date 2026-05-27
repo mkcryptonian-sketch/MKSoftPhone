@@ -6,6 +6,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Backspace
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material3.*
@@ -27,13 +28,15 @@ import com.mksoft.phone.R
 import com.mksoft.phone.core.sip.AccountWrapper
 import com.mksoft.phone.core.sip.RegistrationState
 import com.mksoft.phone.theme.DialerCallGreen
+import com.mksoft.phone.theme.GeminiPrimaryDark
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun DialerScreen(
     accounts: Map<String, AccountWrapper>,
     primaryAccountId: String?,
-    onDial: (String, String) -> Unit
+    onDial: (String, String) -> Unit,
+    onChat: (String) -> Unit
 ) {
     var dialUri by remember { mutableStateOf("") }
     val haptic = LocalHapticFeedback.current
@@ -257,13 +260,35 @@ fun DialerScreen(
                     }
                 }
 
-                // Bottom Call button
+                // Bottom Call and Chat buttons
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(72.dp),
                     contentAlignment = Alignment.Center
                 ) {
+                    // Chat button on the left of call button
+                    if (dialUri.isNotEmpty()) {
+                        IconButton(
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onChat(dialUri)
+                            },
+                            modifier = Modifier
+                                .padding(end = 120.dp)
+                                .size(48.dp)
+                                .clip(CircleShape)
+                                .background(GeminiPrimaryDark.copy(alpha = 0.1f))
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Chat,
+                                contentDescription = "Chat",
+                                tint = GeminiPrimaryDark,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+
                     IconButton(
                         onClick = {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)

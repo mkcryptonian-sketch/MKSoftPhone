@@ -202,6 +202,7 @@ fun AccountWizardDialog(
     var domain by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var transport by remember { mutableStateOf("TLS") }
+    var useSbc by remember { mutableStateOf(false) }
     
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -285,6 +286,18 @@ fun AccountWizardDialog(
                     }
                 }
                 
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Use SBC", style = MaterialTheme.typography.bodyMedium)
+                    Switch(
+                        checked = useSbc,
+                        onCheckedChange = { useSbc = it }
+                    )
+                }
+
                 Spacer(modifier = Modifier.height(24.dp))
                 
                 Row(
@@ -303,7 +316,8 @@ fun AccountWizardDialog(
                                 username = username,
                                 domain = domain,
                                 secret = password,
-                                transport = transport
+                                transport = transport,
+                                useSbc = useSbc
                             ))
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = GeminiPrimaryDark)
@@ -394,6 +408,60 @@ fun AccountDetailsScreen(
                     label = { Text("Password") },
                     modifier = Modifier.fillMaxWidth()
                 )
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    var transportExpanded by remember { mutableStateOf(false) }
+                    val transports = listOf("UDP", "TCP", "TLS")
+
+                    Box(modifier = Modifier.weight(1f)) {
+                        OutlinedTextField(
+                            value = editedAccount.transport,
+                            onValueChange = { },
+                            readOnly = true,
+                            label = { Text("Transport") },
+                            modifier = Modifier.fillMaxWidth(),
+                            trailingIcon = {
+                                IconButton(onClick = { transportExpanded = true }) {
+                                    Icon(Icons.Default.ArrowDropDown, "Select Transport")
+                                }
+                            }
+                        )
+                        DropdownMenu(
+                            expanded = transportExpanded,
+                            onDismissRequest = { transportExpanded = false }
+                        ) {
+                            transports.forEach { t ->
+                                DropdownMenuItem(
+                                    text = { Text(t) },
+                                    onClick = {
+                                        editedAccount = editedAccount.copy(transport = t)
+                                        transportExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = editedAccount.port?.toString() ?: "",
+                        onValueChange = { editedAccount = editedAccount.copy(port = it.toIntOrNull()) },
+                        label = { Text("Port (Optional)") },
+                        modifier = Modifier.weight(1f),
+                        placeholder = { Text("e.g. 5060") }
+                    )
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Use SBC", style = MaterialTheme.typography.bodyMedium)
+                    Switch(
+                        checked = editedAccount.useSbc,
+                        onCheckedChange = { editedAccount = editedAccount.copy(useSbc = it) }
+                    )
+                }
             }
         }
         

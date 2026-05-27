@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.CallReceived
 import androidx.compose.material.icons.automirrored.filled.CallMade
 import androidx.compose.material.icons.filled.Call
@@ -30,7 +31,8 @@ import java.util.*
 fun HistoryScreen(
     history: List<CallHistoryEntry>,
     onClear: () -> Unit,
-    onCall: (String) -> Unit
+    onCall: (String) -> Unit,
+    onChat: (String) -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
@@ -131,8 +133,16 @@ fun HistoryScreen(
                                 )
                             }
                             
-                            IconButton(onClick = { onCall(entry.number) }) {
-                                Icon(Icons.Filled.Call, contentDescription = "Call Back", tint = GeminiPrimaryDark)
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                IconButton(onClick = { onChat(entry.number) }) {
+                                    Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = "Chat", tint = GeminiPrimaryDark)
+                                }
+                                IconButton(onClick = { onCall(entry.number) }) {
+                                    Icon(Icons.Filled.Call, contentDescription = "Call Back", tint = GeminiPrimaryDark)
+                                }
                             }
                         }
                     }

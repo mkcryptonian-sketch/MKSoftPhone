@@ -54,7 +54,8 @@ data class CallWrapper(
     val isBluetoothOn: Boolean = false,
     val connectTimestamp: Long? = null,
     val isIncoming: Boolean = false,
-    val isThirdParty: Boolean = false
+    val isThirdParty: Boolean = false,
+    val wasAnswered: Boolean = false
 )
 
 enum class SecurityLevel {

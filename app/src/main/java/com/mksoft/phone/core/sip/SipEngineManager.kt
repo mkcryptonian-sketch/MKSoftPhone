@@ -10,6 +10,7 @@ import com.mksoft.phone.core.audit.AuditManager
 import com.mksoft.phone.data.DefaultDataRepository
 import com.mksoft.phone.data.SipAccountConfig
 import com.mksoft.phone.data.SipCodecConfig
+import com.mksoft.phone.data.VoIpSettings
 import com.mksoft.phone.service.SipService
 import com.mksoft.phone.service.VoIpConnection
 import com.mksoft.phone.service.VoIpConnectionService
@@ -70,6 +71,7 @@ class SipEngineManager private constructor(private val context: Context) {
     private val linphoneAccounts = ConcurrentHashMap<String, Account>()
     private val activeRecorders = ConcurrentHashMap<Int, String>() // callId to File path
     private val locallyDeclinedCallIds = ConcurrentHashMap.newKeySet<Int>()
+    private val answeredCallIds = ConcurrentHashMap.newKeySet<Int>()
     private val sipMutex = Mutex()
     private var pendingPushConnection: VoIpConnection? = null
 
@@ -256,6 +258,11 @@ class SipEngineManager private constructor(private val context: Context) {
                     else -> SipCallState.Idle
                 }
 
+                // Ensure the call is tracked natively throughout its lifecycle
+                if (state != Call.State.Released) {
+                    linphoneCalls[callId] = call
+                }
+
                 val account = findAccountForCall(call)
                 val accountId = if (account != null) {
                     val identity = account.params?.identityAddress
@@ -267,6 +274,14 @@ class SipEngineManager private constructor(private val context: Context) {
                 val peerUri = if (remoteAddr != null) "sip:${remoteAddr.username}@${remoteAddr.domain}" else "Unknown"
 
                 var current = callMap[callId]
+                
+                // Track "Answered" state permanently for this call instance
+                if (state == Call.State.Connected || state == Call.State.StreamsRunning) {
+                    answeredCallIds.add(callId)
+                }
+                
+                val isActuallyAnswered = answeredCallIds.contains(callId)
+
                 if (current == null) {
                     val updatedConnectTimestamp = if (sipCallState == SipCallState.Confirmed) {
                         System.currentTimeMillis()
@@ -279,7 +294,8 @@ class SipEngineManager private constructor(private val context: Context) {
                         peerUri = peerUri,
                         callState = sipCallState,
                         isIncoming = isIncoming,
-                        connectTimestamp = updatedConnectTimestamp
+                        connectTimestamp = updatedConnectTimestamp,
+                        wasAnswered = isActuallyAnswered
                     )
                     callMap[callId] = current
                 } else {
@@ -290,7 +306,8 @@ class SipEngineManager private constructor(private val context: Context) {
                     }
                     current = current.copy(
                         callState = sipCallState,
-                        connectTimestamp = updatedConnectTimestamp
+                        connectTimestamp = updatedConnectTimestamp,
+                        wasAnswered = isActuallyAnswered
                     )
                     callMap[callId] = current
                 }
@@ -300,7 +317,7 @@ class SipEngineManager private constructor(private val context: Context) {
                 val connection = connections[callId]
                 if (connection != null) {
                     when (state) {
-                        Call.State.StreamsRunning -> {
+                        Call.State.Connected, Call.State.StreamsRunning -> {
                             connection.setActive()
                         }
                         Call.State.End, Call.State.Released, Call.State.Error -> {
@@ -313,6 +330,7 @@ class SipEngineManager private constructor(private val context: Context) {
                                 403 -> android.telecom.DisconnectCause.RESTRICTED
                                 else -> android.telecom.DisconnectCause.REMOTE
                             }
+                            Log.d(TAG, "Notifying Telecom of disconnection for $callId. Code: $code, Reason: $reason")
                             try {
                                 connection.setDisconnected(android.telecom.DisconnectCause(cause, reason))
                                 connection.destroy()
@@ -326,9 +344,7 @@ class SipEngineManager private constructor(private val context: Context) {
                 }
 
                 // Handle incoming call ringing and matching
-                if (state == Call.State.IncomingReceived) {
-                    linphoneCalls[callId] = call
-
+                if (state == Call.State.IncomingReceived || state == Call.State.IncomingEarlyMedia) {
                     val repository = DefaultDataRepository.getInstance(context)
                     val settings = repository.settings.value
 
@@ -402,7 +418,6 @@ class SipEngineManager private constructor(private val context: Context) {
                         stopRecording(callId)
                     }
 
-
                     val hideIntent = android.content.Intent(context, SipService::class.java).apply {
                         action = SipService.ACTION_HIDE_INCOMING_CALL_UI
                         putExtra(SipService.EXTRA_CALL_ID, callId)
@@ -417,15 +432,24 @@ class SipEngineManager private constructor(private val context: Context) {
 
                     // Remove from UI map immediately on End/Error to ensure UI reflects disconnection
                     val removedCall = callMap.remove(callId)
+                    if (removedCall != null) {
+                        Log.d(TAG, "Removed call $callId from callMap. wasAnswered=${removedCall.wasAnswered}")
+                    }
                     _activeCalls.value = callMap.toMap()
 
                     if (state == Call.State.Released) {
                         linphoneCalls.remove(callId)
+                        answeredCallIds.remove(callId)
                     }
 
                     val wasLocallyDeclined = locallyDeclinedCallIds.remove(callId)
-                    if (removedCall != null && removedCall.isIncoming && removedCall.connectTimestamp == null) {
+                    val wasAnswered = answeredCallIds.contains(callId) || (removedCall?.wasAnswered == true)
+                    
+                    Log.d(TAG, "Termination check for $callId: state=$state, isIncoming=${removedCall?.isIncoming}, wasAnswered=$wasAnswered, locallyDeclined=$wasLocallyDeclined")
+
+                    if (removedCall != null && removedCall.isIncoming && !wasAnswered) {
                         if (!wasLocallyDeclined && state != Call.State.Error) {
+                            Log.d(TAG, "Triggering missed call notification for ${removedCall.peerUri}")
                             val missedIntent = android.content.Intent(context, SipService::class.java).apply {
                                 action = SipService.ACTION_SHOW_MISSED_CALL
                                 putExtra(SipService.EXTRA_PEER_URI, removedCall.peerUri)
@@ -509,16 +533,45 @@ class SipEngineManager private constructor(private val context: Context) {
         // Linphone handles DSP filters, AEC, and AGC internally.
     }
 
-    fun applyGlobalSettings(settings: com.mksoft.phone.data.VoIpSettings) {
+    fun applyGlobalSettings(settings: VoIpSettings) {
         sipScope.launch(Dispatchers.Main) {
             try {
                 if (!::core.isInitialized) return@launch
+
+                // --- Latency Optimization: Audio Settings ---
+                core.config?.setInt("sound", "playback_buffer_size", 40) 
+                core.config?.setInt("sound", "record_buffer_size", 40)
+                
+                // --- Audio & Media ---
+                core.isEchoCancellationEnabled = settings.aecEnabled
+                
+                // RTP Timeout settings to detect disconnected peers (Stuck Call Fix)
+                core.config?.setInt("rtp", "rtp_timeout", 10) 
+                core.config?.setInt("rtp", "nortp_timeout", 5) // 5s of no RTP -> disconnect
+
+                // Session Timers (RFC 4028) - Force refresh to detect dead sessions
+                core.config?.setBool("sip", "use_session_timers", true)
+                core.config?.setInt("sip", "session_expires", 60) 
+                core.config?.setInt("sip", "session_refresher_value", 0) 
+                
+                // NAT & VPN Robustness
+                core.config?.setBool("sip", "relaxed_ack_validation", true)
+                core.config?.setBool("sip", "fixed_contact_with_any_port", true)
+                core.config?.setBool("sip", "contact_has_any_port", true)
+                
+                core.config?.setBool("rtp", "jitter_buffer_enabled", true)
+                core.config?.setInt("rtp", "jitter_buffer_min_size", 40)   
+                core.config?.setInt("rtp", "jitter_buffer_max_size", 200)
 
                 // Network & NAT
                 val natPolicy = core.natPolicy ?: core.createNatPolicy()
                 natPolicy.stunServer = settings.stunServer
                 natPolicy.isStunEnabled = settings.stunServer.isNotBlank()
                 natPolicy.isIceEnabled = settings.iceEnabled
+                // Standard behavior for modern SIP proxies: always use rport
+                core.config?.setBool("sip", "fixed_contact_with_any_port", true)
+                core.isNetworkReachable = true
+                
                 if (settings.turnServer.isNotBlank()) {
                     natPolicy.stunServer = settings.turnServer
                     // In some SDK versions, it's setTurnEnabled(true)
@@ -713,6 +766,12 @@ class SipEngineManager private constructor(private val context: Context) {
             val repository = DefaultDataRepository.getInstance(context)
             val allAccounts = repository.accounts.value
             
+            // Priority list for low latency:
+            // 1. Opus (if configured for low latency/high bit rate)
+            // 2. G722 (excellent quality, low overhead)
+            // 3. PCMU/PCMA (Standard, zero processing delay)
+            val latencyPriority = listOf("opus", "g722", "pcmu", "pcma")
+
             // Enable all codecs that are enabled in ANY active account
             val enabledMimes = mutableSetOf<String>()
             allAccounts.filter { it.isEnabled }.forEach { config ->
@@ -722,27 +781,33 @@ class SipEngineManager private constructor(private val context: Context) {
             }
 
             if (enabledMimes.isEmpty()) {
-                // If no accounts or none enabled, keep a sane default set
-                enabledMimes.addAll(listOf("opus", "pcmu", "pcma", "g722"))
+                enabledMimes.addAll(listOf("opus", "g722", "pcmu", "pcma"))
             }
 
             audioCodecs.forEach { payloadType ->
                 val mime = payloadType.mimeType.lowercase()
-                payloadType.enable(enabledMimes.contains(mime))
+                val isEnabled = enabledMimes.contains(mime)
+                payloadType.enable(isEnabled)
+                
+                if (isEnabled) {
+                    // Adjust priority based on our latency list
+                    val index = latencyPriority.indexOf(mime)
+                    if (index != -1) {
+                        // Linphone higher number = higher priority
+                        payloadType.number = 100 - index 
+                    }
+                }
             }
-            Log.d(TAG, "Codec priorities updated globally for all active accounts")
+            Log.d(TAG, "Codec priorities updated globally for all active accounts with latency optimization")
         } catch (e: Exception) {
             Log.e(TAG, "Error updating codec priorities: ${e.message}", e)
         }
     }
 
-    private suspend fun addAccountNativeLocked(config: SipAccountConfig): String {
-        val repository = DefaultDataRepository.getInstance(context)
-        val settings = repository.settings.value
-
+    private fun resolveRoutingParameters(config: SipAccountConfig, settings: VoIpSettings): Triple<String, String, Int?> {
         val defaultLocalDomain = "ast.cdoapp.online"
         val configuredLocal = settings.localDomain.trim()
-        
+
         val isLocalAccount = if (configuredLocal.isNotBlank()) {
             config.domain.contains(configuredLocal, ignoreCase = true)
         } else {
@@ -750,19 +815,33 @@ class SipEngineManager private constructor(private val context: Context) {
         }
 
         val customProxy = settings.outboundProxy.trim()
-        val resolvedProxy = if (isLocalAccount) {
-            ""
-        } else {
-            if (customProxy.isNotBlank()) customProxy else "sip:ast.cdoapp.online:5066;transport=tls"
-        }
 
-        val resolvedConfig = config.copy(
-            outboundProxy = resolvedProxy,
-            transport = when {
-                !isLocalAccount -> "TLS" // Use TLS for proxied accounts
-                isLocalAccount -> "TLS"  // Force TLS for local accounts
-                else -> config.transport
+        return when {
+            // Logic 1: Direct Asterisk (Bypass Flexisip)
+            isLocalAccount && !config.useSbc -> {
+                Triple("", config.transport, config.port)
             }
+            // Logic 2: Local account via Flexisip SBC
+            isLocalAccount && config.useSbc -> {
+                Triple("sip:ast.cdoapp.online:5066;transport=tls", "TLS", 5066)
+            }
+            // Logic 3: Non-local account via Flexisip Proxy
+            else -> {
+                val proxy = customProxy.ifBlank { "sips:ast.cdoapp.online:5066;transport=tls" }
+                Triple(proxy, "TLS", 5066)
+            }
+        }
+    }
+
+    private suspend fun addAccountNativeLocked(config: SipAccountConfig): String {
+        val repository = DefaultDataRepository.getInstance(context)
+        val settings = repository.settings.value
+
+        val routing = resolveRoutingParameters(config, settings)
+        val resolvedConfig = config.copy(
+            outboundProxy = routing.first,
+            transport = routing.second,
+            port = routing.third
         )
         val accountId = resolvedConfig.id
         if (linphoneAccounts.containsKey(accountId)) {
@@ -802,12 +881,13 @@ class SipEngineManager private constructor(private val context: Context) {
 
             if (resolvedConfig.outboundProxy.isNotEmpty()) {
                 val proxyAddress = factory.createAddress(resolvedConfig.outboundProxy)
+                // When using SBC, we point the server address directly to the proxy to avoid "482 Loop Detected"
                 accountParams.serverAddress = proxyAddress
                 accountParams.isOutboundProxyEnabled = true
-                // We don't manually set routes as Linphone 5.x handles this via outboundProxyEnabled 
-                // and the serverAddress. Manually setting routes can sometimes cause ambiguity.
             } else {
-                val server = factory.createAddress("sip:${resolvedConfig.domain}$transportSuffix")
+                val scheme = if (resolvedConfig.transport.uppercase() == "TLS") "sips" else "sip"
+                val portSuffix = if (resolvedConfig.port != null) ":${resolvedConfig.port}" else ""
+                val server = factory.createAddress("$scheme:${resolvedConfig.domain}$portSuffix$transportSuffix")
                 accountParams.serverAddress = server
                 accountParams.isOutboundProxyEnabled = false
             }
@@ -896,15 +976,7 @@ class SipEngineManager private constructor(private val context: Context) {
         val repository = DefaultDataRepository.getInstance(context)
         val settings = repository.settings.value
 
-        val defaultLocalDomain = "ast.cdoapp.online"
-        val configuredLocal = settings.localDomain.trim()
-        
-        val isLocalAccount = if (configuredLocal.isNotBlank()) {
-            config.domain.contains(configuredLocal, ignoreCase = true)
-        } else {
-            config.domain.contains(defaultLocalDomain, ignoreCase = true)
-        }
-
+        val routing = resolveRoutingParameters(config, settings)
         val appPackageName = context.packageName
 
         val sipInstanceId = if (config.sipInstanceId.isBlank()) {
@@ -913,20 +985,10 @@ class SipEngineManager private constructor(private val context: Context) {
             config.sipInstanceId
         }
 
-        val customProxy = settings.outboundProxy.trim()
-        val resolvedProxy = if (isLocalAccount) {
-            ""
-        } else {
-            if (customProxy.isNotBlank()) customProxy else "sip:ast.cdoapp.online:5066;transport=tls"
-        }
-
         val resolvedConfig = config.copy(
-            outboundProxy = resolvedProxy,
-            transport = when {
-                !isLocalAccount -> "TLS" // Use TLS for proxied accounts
-                isLocalAccount -> "TLS"  // Force TLS for local accounts
-                else -> config.transport
-            },
+            outboundProxy = routing.first,
+            transport = routing.second,
+            port = routing.third,
             isPushEnabled = true,
             fcmToken = fcmToken,
             packageName = appPackageName,
@@ -1218,6 +1280,11 @@ class SipEngineManager private constructor(private val context: Context) {
     fun answerCall(callId: Int) {
         val call = linphoneCalls[callId]
         if (call != null) {
+            answeredCallIds.add(callId)
+            val current = callMap[callId]
+            if (current != null) {
+                callMap[callId] = current.copy(wasAnswered = true)
+            }
             call.accept()
             Log.d(TAG, "Answered call ID: $callId")
         } else {
@@ -1226,13 +1293,22 @@ class SipEngineManager private constructor(private val context: Context) {
     }
 
     fun hangupCall(callId: Int) {
+        Log.d(TAG, "hangupCall request for ID: $callId")
         val call = linphoneCalls[callId]
         if (call != null) {
             locallyDeclinedCallIds.add(callId)
             call.terminate()
-            Log.d(TAG, "Hanging up call ID: $callId")
+            Log.d(TAG, "Hanging up call ID: $callId. Added to locallyDeclinedCallIds.")
         } else {
-            Log.e(TAG, "hangupCall: Call ID $callId not found")
+            Log.e(TAG, "hangupCall: Call ID $callId not found in linphoneCalls map")
+            // Still add to declined list just in case of a race condition
+            locallyDeclinedCallIds.add(callId)
+            
+            // Try to find it in the core's own call list as a fallback
+            core.calls.find { it.hashCode() == callId }?.let {
+                Log.d(TAG, "Found call in core.calls fallback. Terminating.")
+                it.terminate()
+            }
         }
     }
 
@@ -1382,7 +1458,14 @@ class SipEngineManager private constructor(private val context: Context) {
                 if (!::core.isInitialized) return@launch
                 
                 val addr = factory.createAddress(peerUri) ?: return@launch
-                val chatRoom = core.getChatRoom(addr) ?: core.createChatRoom("", arrayOf(addr)) ?: return@launch
+                
+                // For Linphone 5.x, getChatRoom(Address) or createChatRoom(subject, participants)
+                val chatRoom = core.getChatRoom(addr) ?: core.createChatRoom("", arrayOf(addr))
+
+                if (chatRoom == null) {
+                    Log.e(TAG, "Failed to find or create chat room for $peerUri")
+                    return@launch
+                }
                 
                 val message = chatRoom.createEmptyMessage()
                 message.addUtf8TextContent(content)
@@ -1390,7 +1473,7 @@ class SipEngineManager private constructor(private val context: Context) {
                 
                 Log.d(TAG, "Message sent to $peerUri: $content")
             } catch (e: Exception) {
-                Log.e(TAG, "Error sending message: ${e.message}")
+                Log.e(TAG, "Error sending message to $peerUri: ${e.message}")
             }
         }
     }

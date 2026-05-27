@@ -259,7 +259,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    fun addSipAccount(username: String, domain: String, password: String, transport: String, usePushProxy: Boolean = false, onComplete: () -> Unit = {}) {
+    fun addSipAccount(username: String, domain: String, password: String, transport: String, useSbc: Boolean = false, onComplete: () -> Unit = {}) {
         viewModelScope.launch(Dispatchers.IO) {
             // Ensure service is running and engine is initialized first
             withContext(Dispatchers.Main) {
@@ -276,7 +276,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                     secret = password,
                     transport = transport,
                     isPushEnabled = true, // Default to true for background reliability
-                    usePushProxy = usePushProxy
+                    useSbc = useSbc
                 )
                 addSipAccount(config)
                 onComplete()

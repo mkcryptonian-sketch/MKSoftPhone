@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -30,7 +31,8 @@ import java.util.*
 
 @Composable
 fun ContactsScreen(
-    onCall: (String) -> Unit
+    onCall: (String) -> Unit,
+    onChat: (String) -> Unit
 ) {
     var deviceContacts by remember { mutableStateOf<List<SipContact>>(emptyList()) }
     var hasContactPermission by remember { mutableStateOf(false) }
@@ -232,14 +234,29 @@ fun ContactsScreen(
                                     )
                                 }
 
-                                IconButton(
-                                    onClick = { onCall(contact.sipAddress) },
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .clip(CircleShape)
-                                        .background(DialerCallGreen.copy(alpha = 0.1f))
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(Icons.Filled.Call, contentDescription = "Call", tint = DialerCallGreen)
+                                    IconButton(
+                                        onClick = { onChat(contact.sipAddress) },
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .clip(CircleShape)
+                                            .background(GeminiPrimaryDark.copy(alpha = 0.1f))
+                                    ) {
+                                        Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = "Chat", tint = GeminiPrimaryDark)
+                                    }
+
+                                    IconButton(
+                                        onClick = { onCall(contact.sipAddress) },
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .clip(CircleShape)
+                                            .background(DialerCallGreen.copy(alpha = 0.1f))
+                                    ) {
+                                        Icon(Icons.Filled.Call, contentDescription = "Call", tint = DialerCallGreen)
+                                    }
                                 }
                             }
                         }

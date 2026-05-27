@@ -393,7 +393,11 @@ fun MainScreen(
                         ScreenRoute.Dialer -> DialerScreen(
                             accounts = activeAccounts,
                             primaryAccountId = primaryAccountId,
-                            onDial = { accountId, destUri -> viewModel.makeSipCall(accountId, destUri) }
+                            onDial = { accountId, destUri -> viewModel.makeSipCall(accountId, destUri) },
+                            onChat = { peer ->
+                                currentChatPeer = if (peer.startsWith("sip:")) peer else "sip:$peer"
+                                currentScreen = ScreenRoute.Chat
+                            }
                         )
                         ScreenRoute.History -> HistoryScreen(
                             history = callHistory,
@@ -403,6 +407,10 @@ fun MainScreen(
                                     val accId = primaryAccountId?.takeIf { activeAccounts.containsKey(it) } ?: activeAccounts.keys.first()
                                     viewModel.makeSipCall(accId, number)
                                 }
+                            },
+                            onChat = { peer ->
+                                currentChatPeer = peer
+                                currentScreen = ScreenRoute.Chat
                             }
                         )
                         ScreenRoute.Contacts -> ContactsScreen(
@@ -411,6 +419,10 @@ fun MainScreen(
                                     val accId = primaryAccountId?.takeIf { activeAccounts.containsKey(it) } ?: activeAccounts.keys.first()
                                     viewModel.makeSipCall(accId, address)
                                 }
+                            },
+                            onChat = { peer ->
+                                currentChatPeer = peer
+                                currentScreen = ScreenRoute.Chat
                             }
                         )
                         ScreenRoute.Accounts -> {

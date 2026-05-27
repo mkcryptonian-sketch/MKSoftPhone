@@ -96,7 +96,9 @@ data class SipAccountConfig(
     val outboundProxy: String = "",
     val isPushEnabled: Boolean = false,
     val usePushProxy: Boolean = false, // Requirement: Support 3rd party push routing via Flexisip
+    val useSbc: Boolean = false, // Use SBC for local domain
     val transport: String = "UDP", // "UDP", "TCP", "TLS"
+    val port: Int? = null,
     val srtpMode: Int = 0, // 0 = disabled, 1 = optional, 2 = mandatory
     val zrtpEnabled: Boolean = false,
     val numberRewriting: String = "",

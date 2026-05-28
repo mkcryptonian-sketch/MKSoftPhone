@@ -10,6 +10,7 @@ import android.os.IBinder
 import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.app.Person
 import com.mksoft.phone.MainActivity
 import com.mksoft.phone.R
 import com.mksoft.phone.core.sip.SipEngineManager
@@ -164,6 +165,17 @@ class SipService : Service(), android.hardware.SensorEventListener {
                         screenWakeLock.acquire(10000L) // 10 seconds screen wake
                     } catch (e: Exception) {
                         Log.e(TAG, "Failed to acquire screen wake lock: ${e.message}")
+                    }
+                    
+                    // Direct activity launch to guarantee the call screen pops up immediately when locked/off
+                    try {
+                        val activityIntent = Intent(this, MainActivity::class.java).apply {
+                            setFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                        }
+                        startActivity(activityIntent)
+                        Log.d(TAG, "Successfully triggered MainActivity directly for incoming call")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to launch MainActivity directly: ${e.message}")
                     }
                     
                     showIncomingCallNotification(callId, peerUri)
@@ -330,14 +342,8 @@ class SipService : Service(), android.hardware.SensorEventListener {
     }
 
     private fun buildServiceNotification(title: String, text: String): Notification {
-        val mainActivityClass = try {
-            Class.forName("com.mksoft.phone.MainActivity")
-        } catch (e: Exception) {
-            null
-        }
-
-        val pendingIntent = if (mainActivityClass != null) {
-            val intent = Intent(this, mainActivityClass).apply {
+        val pendingIntent = run {
+            val intent = Intent(this, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
             }
             PendingIntent.getActivity(
@@ -346,8 +352,6 @@ class SipService : Service(), android.hardware.SensorEventListener {
                 intent,
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
             )
-        } else {
-            null
         }
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
@@ -613,24 +617,34 @@ class SipService : Service(), android.hardware.SensorEventListener {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // 4. Build heads-up notification
+        // 4. Build premium Heads-Up Notification using system CallStyle
+        val caller = Person.Builder()
+            .setName(cleanPeerUri)
+            .setImportant(true)
+            .build()
+
         val notification = NotificationCompat.Builder(this, CALL_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_logo)
             .setContentTitle(getString(R.string.incoming_call_title))
             .setContentText(cleanPeerUri)
-            .setSmallIcon(android.R.drawable.stat_sys_phone_call)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setOngoing(true)
             .setAutoCancel(false)
             .setFullScreenIntent(fullScreenPendingIntent, true)
             .setContentIntent(fullScreenPendingIntent)
-            .addAction(android.R.drawable.ic_menu_call, getString(R.string.action_answer), answerPendingIntent)
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, getString(R.string.action_decline), declinePendingIntent)
+            .setStyle(
+                NotificationCompat.CallStyle.forIncomingCall(
+                    caller,
+                    declinePendingIntent,
+                    answerPendingIntent
+                )
+            )
             .build()
 
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.notify(callId, notification)
-        Log.d(TAG, "Showed incoming call notification for callId: $callId")
+        Log.d(TAG, "Showed premium CallStyle incoming notification for callId: $callId")
     }
 
     private fun cancelIncomingCallNotification(callId: Int) {
@@ -642,15 +656,8 @@ class SipService : Service(), android.hardware.SensorEventListener {
     private fun showMissedCallNotification(peerUri: String) {
         val cleanPeerUri = if (peerUri.startsWith("sip:")) peerUri.substring(4) else peerUri
         
-        // Target MainActivity for tapping the notification
-        val mainActivityClass = try {
-            Class.forName("com.mksoft.phone.MainActivity")
-        } catch (e: Exception) {
-            null
-        }
-
-        val pendingIntent = if (mainActivityClass != null) {
-            val intent = Intent(this, mainActivityClass).apply {
+        val pendingIntent = run {
+            val intent = Intent(this, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
                 putExtra("navigate_to", "history")
             }
@@ -660,8 +667,6 @@ class SipService : Service(), android.hardware.SensorEventListener {
                 intent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
-        } else {
-            null
         }
 
         val notification = NotificationCompat.Builder(this, "MissedCallChannel")

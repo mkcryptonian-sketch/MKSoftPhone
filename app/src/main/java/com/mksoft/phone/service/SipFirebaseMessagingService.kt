@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.PowerManager
 import android.util.Log
+import com.mksoft.phone.MainActivity
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.mksoft.phone.core.sip.SipEngineManager
@@ -124,7 +125,7 @@ class SipFirebaseMessagingService : FirebaseMessagingService() {
             }
 
             // Target MainActivity for tapping the notification
-            val intent = Intent(context, Class.forName("com.mksoft.phone.MainActivity")).apply {
+            val intent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
             }
             val pendingIntent = PendingIntent.getActivity(

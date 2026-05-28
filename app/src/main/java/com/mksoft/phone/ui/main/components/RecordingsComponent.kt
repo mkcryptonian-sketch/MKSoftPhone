@@ -1,6 +1,8 @@
 package com.mksoft.phone.ui.main.components
 
 import android.media.MediaPlayer
+import android.media.MediaMetadataRetriever
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -25,6 +27,23 @@ import com.mksoft.phone.theme.GeminiPrimaryDark
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
+
+private fun getAudioDuration(file: File): String {
+    val retriever = MediaMetadataRetriever()
+    return try {
+        retriever.setDataSource(file.absolutePath)
+        val time = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+        val timeMs = time?.toLong() ?: 0L
+        val seconds = (timeMs / 1000) % 60
+        val minutes = (timeMs / 1000) / 60
+        String.format("%02d:%02d", minutes, seconds)
+    } catch (e: Exception) {
+        "00:00"
+    } finally {
+        retriever.release()
+    }
+}
+
 
 @Composable
 fun RecordingsScreen(
@@ -91,21 +110,7 @@ fun RecordingsScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                "Audio Files",
-                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold)
-            )
-            IconButton(onClick = onRefresh) {
-                Icon(Icons.Filled.Refresh, contentDescription = "Refresh")
-            }
-        }
+        Spacer(modifier = Modifier.height(8.dp))
 
         if (recordings.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -169,8 +174,9 @@ fun RecordingsScreen(
                                     text = file.name.substringAfter("rec_").substringBefore("_"),
                                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                                 )
+                                val duration = remember(file.absolutePath) { getAudioDuration(file) }
                                 Text(
-                                    text = dateStr,
+                                    text = "$dateStr  •  $duration",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )

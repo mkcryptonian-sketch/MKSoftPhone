@@ -31,8 +31,7 @@ import java.util.*
 
 @Composable
 fun ContactsScreen(
-    onCall: (String) -> Unit,
-    onChat: (String) -> Unit
+    onCall: (String) -> Unit
 ) {
     var deviceContacts by remember { mutableStateOf<List<SipContact>>(emptyList()) }
     var hasContactPermission by remember { mutableStateOf(false) }
@@ -238,15 +237,7 @@ fun ContactsScreen(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    IconButton(
-                                        onClick = { onChat(contact.sipAddress) },
-                                        modifier = Modifier
-                                            .size(40.dp)
-                                            .clip(CircleShape)
-                                            .background(GeminiPrimaryDark.copy(alpha = 0.1f))
-                                    ) {
-                                        Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = "Chat", tint = GeminiPrimaryDark)
-                                    }
+                                    // Call button only
 
                                     IconButton(
                                         onClick = { onCall(contact.sipAddress) },

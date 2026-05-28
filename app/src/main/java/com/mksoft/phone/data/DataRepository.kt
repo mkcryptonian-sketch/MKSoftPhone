@@ -57,7 +57,7 @@ data class VoIpSettings(
     // New Advanced Settings
     val transportProtocol: String = "TLS", // TLS, TCP, UDP
     val turnServer: String = "",
-    val iceEnabled: Boolean = true,
+    val iceEnabled: Boolean = false,
     val keepAliveInterval: Int = 30, // seconds
     val rportEnabled: Boolean = true,
     val ipv6Preference: String = "Dual-stack", // "Force IPv4", "Force IPv6", "Dual-stack"

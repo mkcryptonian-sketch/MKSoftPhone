@@ -37,6 +37,8 @@ build_openssl_android*.sh
 
 # Generated files
 app/google-services.json
+*.apk
+release/
 
 # Local logs and config
 *.txt

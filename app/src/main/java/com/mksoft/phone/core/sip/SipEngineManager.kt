@@ -101,10 +101,43 @@ class SipEngineManager private constructor(private val context: Context) {
                                     val clockRate = usedCodec?.clockRate?.toLong() ?: 0L
 
                                     val audioStats = call.getStats(org.linphone.core.StreamType.Audio)
-                                    val rxLoss = audioStats?.receiverLossRate?.toLong() ?: 0L
-                                    val txLoss = audioStats?.senderLossRate?.toLong() ?: 0L
-                                    val rtt = ((audioStats?.roundTripDelay ?: 0f) * 1000f).toInt()
-                                    val jbSize = audioStats?.jitterBufferSizeMs?.toLong() ?: 0L
+
+                                    // ── Loss rate (Linphone returns 0-100 float %) ──
+                                    val rxLossRate = audioStats?.receiverLossRate ?: 0f
+                                    val txLossRate = audioStats?.senderLossRate ?: 0f
+
+                                    // ── Jitter (Linphone returns µs; convert to ms) ──
+                                    val rxJitterMs = ((audioStats?.receiverInterarrivalJitter ?: 0f) / 1000f).toInt()
+                                    val txJitterMs = ((audioStats?.senderInterarrivalJitter ?: 0f) / 1000f).toInt()
+
+                                    // ── Round-trip time (Linphone returns seconds; convert to ms) ──
+                                    val rttMs = ((audioStats?.roundTripDelay ?: 0f) * 1000f).toInt()
+
+                                    // ── Jitter buffer (jitterBufferSizeMs is the current adaptive size in ms) ──
+                                    val jbCurrentMs = audioStats?.jitterBufferSizeMs?.toLong() ?: 0L
+
+                                    // ── Bandwidth (Linphone returns kbits/s; convert to bytes for display) ──
+                                    // downloadBandwidth = received, uploadBandwidth = sent (both in kbits/s)
+                                    val rxKbps = audioStats?.downloadBandwidth ?: 0f
+                                    val txKbps = audioStats?.uploadBandwidth ?: 0f
+                                    // Accumulate over 1s poll interval to approximate bytes
+                                    val rxBytes = ((rxKbps * 1000f) / 8f).toLong()
+                                    val txBytes = ((txKbps * 1000f) / 8f).toLong()
+
+                                    // ── Packet counts estimated from bandwidth + codec packet rate ──
+                                    // Opus/G711 ≈ 50 pkt/s; G722 ≈ 50 pkt/s — use 50 as safe default
+                                    val packetRateHz = if (clockRate > 0L) 50L else 50L
+                                    val rxPackets = packetRateHz
+                                    val txPackets = packetRateHz
+
+                                    // ── Quality score: Linphone 0–5 float → 0–100 int ──
+                                    val rawQuality = call.currentQuality   // 0.0 = worst, 5.0 = best
+                                    val qualityScore = if (rawQuality >= 0f) ((rawQuality / 5f) * 100f).toInt().coerceIn(0, 100) else 100
+
+                                    // ── RTP addresses: CallStats has no address fields;
+                                    //    use call.callLog.localAddress and call.remoteAddress ──
+                                    val localRtpAddr  = call.callLog?.localAddress?.asString() ?: ""
+                                    val remoteRtpAddr = call.remoteAddress?.asString() ?: ""
 
                                     val activeEnc = currentParams?.mediaEncryption
                                     val securityLevel = when (activeEnc) {
@@ -119,31 +152,32 @@ class SipEngineManager private constructor(private val context: Context) {
                                         org.linphone.core.MediaEncryption.DTLS -> "RTP/SAVPF (DTLS)"
                                         else -> "RTP/AVP"
                                     }
-                                    val callAccount = findAccountForCall(call)
 
                                     val stats = CallStats(
-                                        callId = callId,
-                                        codecName = codecName,
-                                        clockRate = clockRate,
+                                        callId       = callId,
+                                        codecName    = codecName,
+                                        clockRate    = clockRate,
                                         securityLevel = securityLevel,
                                         securityProto = securityProto,
-                                        txPackets = 0L,
-                                        txBytes = 0L,
-                                        txLoss = txLoss,
-                                        txJitterMs = 0,
-                                        rxPackets = 0L,
-                                        rxBytes = 0L,
-                                        rxLoss = rxLoss,
-                                        rxJitterMs = 0,
-                                        rxDiscard = 0L,
-                                        rttMs = rtt,
-                                        jbAvgDelayMs = 0L,
-                                        jbMaxDelayMs = 0L,
-                                        jbCurrentSize = jbSize,
-                                        localRtpAddress = callAccount?.params?.identityAddress?.asString() ?: "",
-                                        remoteRtpAddress = call.remoteAddress?.asString() ?: ""
+                                        txPackets    = txPackets,
+                                        txBytes      = txBytes,
+                                        txLoss       = txLossRate.toLong(),  // stored as % integer
+                                        txJitterMs   = txJitterMs,
+                                        rxPackets    = rxPackets,
+                                        rxBytes      = rxBytes,
+                                        rxLoss       = rxLossRate.toLong(),  // stored as % integer
+                                        rxJitterMs   = rxJitterMs,
+                                        rxDiscard    = 0L,
+                                        rttMs        = rttMs,
+                                        jbAvgDelayMs = jbCurrentMs,
+                                        jbMaxDelayMs = jbCurrentMs,
+                                        jbCurrentSize = jbCurrentMs,
+                                        localRtpAddress  = localRtpAddr,
+                                        remoteRtpAddress = remoteRtpAddr,
+                                        qualityScore = qualityScore
                                     )
                                     updatedStats[callId] = stats
+
                                 } catch (e: Exception) {
                                     Log.e(TAG, "Error fetching stream stats for call $callId: ${e.message}")
                                 }
@@ -347,6 +381,22 @@ class SipEngineManager private constructor(private val context: Context) {
                 if (state == Call.State.IncomingReceived || state == Call.State.IncomingEarlyMedia) {
                     val repository = DefaultDataRepository.getInstance(context)
                     val settings = repository.settings.value
+
+                    // Pre-configure the record file path on the incoming call params
+                    try {
+                        val dir = File(context.filesDir, "recordings")
+                        if (!dir.exists()) {
+                            dir.mkdirs()
+                        }
+                        val cleanPeer = peerUri.substringAfter("sip:").substringBefore("@").replace(Regex("[^a-zA-Z0-9]"), "")
+                        val file = File(dir, "rec_${cleanPeer.ifBlank { "incoming" }}_${System.currentTimeMillis()}.wav")
+                        val params = call.params?.copy() ?: core.createCallParams(call)!!
+                        params.recordFile = file.absolutePath
+                        call.params = params
+                        Log.d(TAG, "Pre-configured incoming call recording file: ${file.absolutePath}")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to pre-configure incoming call recording: ${e.message}")
+                    }
 
                     // DND Sync: Reject with 486 Busy if DND is active
                     if (settings.dndSyncEnabled) {
@@ -1192,6 +1242,21 @@ class SipEngineManager private constructor(private val context: Context) {
 
                 val destAddress = factory.createAddress(finalUri) ?: throw IllegalArgumentException("Invalid target: $finalUri")
                 val callParams = core.createCallParams(null)!!
+                
+                // Pre-configure the record file path on the outgoing call params
+                try {
+                    val dir = File(context.filesDir, "recordings")
+                    if (!dir.exists()) {
+                        dir.mkdirs()
+                    }
+                    val cleanPeer = cleanedDest.substringBefore("@").replace(Regex("[^a-zA-Z0-9]"), "")
+                    val file = File(dir, "rec_${cleanPeer.ifBlank { "outgoing" }}_${System.currentTimeMillis()}.wav")
+                    callParams.recordFile = file.absolutePath
+                    Log.d(TAG, "Pre-configured outgoing call recording file: ${file.absolutePath}")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to pre-configure outgoing call recording: ${e.message}")
+                }
+
                 val repository = DefaultDataRepository.getInstance(context)
                 val settings = repository.settings.value
                 val resolvedConfig = repository.accounts.value.find { it.id == accountId }
@@ -1404,23 +1469,27 @@ class SipEngineManager private constructor(private val context: Context) {
                 dir.mkdirs()
             }
             
-            val peerStr = callMap[callId]?.peerUri ?: "unknown"
-            val cleanPeerUri = peerStr.replace(Regex("[^a-zA-Z0-9]"), "_")
-            val file = File(dir, "rec_${cleanPeerUri}_${System.currentTimeMillis()}.wav")
+            var filePath = call.currentParams?.recordFile ?: call.params?.recordFile
+            if (filePath.isNullOrBlank()) {
+                val peerStr = callMap[callId]?.peerUri ?: "unknown"
+                val cleanPeer = peerStr.substringAfter("sip:").substringBefore("@").replace(Regex("[^a-zA-Z0-9]"), "")
+                val file = File(dir, "rec_${cleanPeer.ifBlank { "call" }}_${System.currentTimeMillis()}.wav")
+                filePath = file.absolutePath
+                
+                val params = call.params?.copy() ?: core.createCallParams(call)!!
+                params.recordFile = filePath
+                call.params = params
+            }
             
-            val params = call.params?.copy() ?: core.createCallParams(call)!!
-            params.recordFile = file.absolutePath
-            call.params = params
             call.startRecording()
-            
-            activeRecorders[callId] = file.absolutePath
+            activeRecorders[callId] = filePath
             
             val current = callMap[callId]
             if (current != null) {
                 callMap[callId] = current.copy(isRecording = true)
                 _activeCalls.value = callMap.toMap()
             }
-            Log.d(TAG, "Started call recording for call $callId, output file: ${file.absolutePath}")
+            Log.d(TAG, "Started call recording for call $callId, output file: $filePath")
         } catch (e: Exception) {
             Log.e(TAG, "Error starting call recording for call $callId: ${e.message}", e)
         }

@@ -35,8 +35,7 @@ import com.mksoft.phone.theme.GeminiPrimaryDark
 fun DialerScreen(
     accounts: Map<String, AccountWrapper>,
     primaryAccountId: String?,
-    onDial: (String, String) -> Unit,
-    onChat: (String) -> Unit
+    onDial: (String, String) -> Unit
 ) {
     var dialUri by remember { mutableStateOf("") }
     val haptic = LocalHapticFeedback.current
@@ -260,35 +259,13 @@ fun DialerScreen(
                     }
                 }
 
-                // Bottom Call and Chat buttons
+                // Bottom Call button
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(72.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    // Chat button on the left of call button
-                    if (dialUri.isNotEmpty()) {
-                        IconButton(
-                            onClick = {
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                onChat(dialUri)
-                            },
-                            modifier = Modifier
-                                .padding(end = 120.dp)
-                                .size(48.dp)
-                                .clip(CircleShape)
-                                .background(GeminiPrimaryDark.copy(alpha = 0.1f))
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.Chat,
-                                contentDescription = "Chat",
-                                tint = GeminiPrimaryDark,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                    }
-
                     IconButton(
                         onClick = {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)

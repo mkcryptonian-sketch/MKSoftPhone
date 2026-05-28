@@ -1,5 +1,6 @@
 package com.mksoft.phone
 
+import android.content.Context
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -21,6 +22,22 @@ import com.mksoft.phone.ui.main.MainScreenViewModel
 
 @Composable
 fun MainNavigation(viewModel: MainScreenViewModel = viewModel()) {
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("voip_app_prefs", Context.MODE_PRIVATE) }
+    var hasCompletedOnboarding by remember {
+        mutableStateOf(prefs.getBoolean("has_completed_onboarding", false))
+    }
+
+    if (!hasCompletedOnboarding) {
+        com.mksoft.phone.ui.main.OnboardingScreen(
+            onComplete = {
+                prefs.edit().putBoolean("has_completed_onboarding", true).apply()
+                hasCompletedOnboarding = true
+            }
+        )
+        return
+    }
+
     val accounts by viewModel.savedAccounts.collectAsState(initial = null)
     val settings by viewModel.settings.collectAsState()
 

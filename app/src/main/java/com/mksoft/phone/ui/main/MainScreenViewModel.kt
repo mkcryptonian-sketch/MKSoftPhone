@@ -159,19 +159,32 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                 for (id in disconnectedIds) {
                     val detail = activeCallDetails[id]
                     if (detail != null) {
-                        // Create history entry
-                        val wasAnswered = detail.connectTimestamp != null
-                        val duration = if (wasAnswered) {
-                            (System.currentTimeMillis() - detail.connectTimestamp!!) / 1000
+                        // Use the engine-authoritative wasAnswered flag (set from answeredCallIds)
+                        val wasAnswered = detail.wasAnswered
+                        val connectTs = detail.connectTimestamp
+
+                        val duration = if (wasAnswered && connectTs != null) {
+                            val raw = (System.currentTimeMillis() - connectTs) / 1000
+                            raw.coerceAtLeast(0L) // guard against clock skew
                         } else {
                             0L
                         }
-                        
+
+                        // Record the actual call start time (not now) so history timestamps are accurate
+                        val callTimestamp = connectTs ?: System.currentTimeMillis()
+
+                        // Clean the SIP URI: strip "sip:" prefix and any trailing params
+                        val rawNumber = detail.peerUri
+                        val cleanNumber = rawNumber
+                            .removePrefix("sip:")
+                            .substringBefore(";")
+                            .substringBefore("?")
+
                         repository.addCallHistory(
                             CallHistoryEntry(
                                 id = UUID.randomUUID().toString(),
-                                number = detail.peerUri,
-                                timestamp = System.currentTimeMillis(),
+                                number = cleanNumber,
+                                timestamp = callTimestamp,
                                 duration = duration,
                                 isIncoming = detail.isIncoming,
                                 wasAnswered = wasAnswered,

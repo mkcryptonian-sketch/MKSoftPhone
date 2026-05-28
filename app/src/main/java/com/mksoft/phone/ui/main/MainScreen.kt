@@ -40,7 +40,9 @@ import com.mksoft.phone.core.sip.*
 import com.mksoft.phone.data.*
 import com.mksoft.phone.theme.*
 import com.mksoft.phone.ui.main.components.*
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
+
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import kotlinx.coroutines.launch
@@ -63,14 +65,12 @@ private fun Context.findActivity(): Activity? {
 // Navigation targets
 enum class ScreenRoute(val routeName: String, val titleRes: Int) {
     Dialer("Dialer", R.string.route_dialer),
-    Messaging("Messages", R.string.route_messaging),
     History("Recent Calls", R.string.route_history),
     Contacts("Contacts", R.string.route_contacts),
     Accounts("Accounts", R.string.route_accounts),
     Settings("Settings", R.string.route_settings),
     Recordings("Call Recordings", R.string.route_recordings),
-    AccountDetails("Account Details", R.string.route_account_details),
-    Chat("Chat", R.string.route_chat)
+    AccountDetails("Account Details", R.string.route_account_details)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -98,7 +98,6 @@ fun MainScreen(
 
     var currentScreen by remember { mutableStateOf(ScreenRoute.Dialer) }
     var currentAccount by remember { mutableStateOf<SipAccountConfig?>(null) }
-    var currentChatPeer by remember { mutableStateOf<String?>(null) }
     var showLogoutConfirm by remember { mutableStateOf(false) }
     var showExitConfirm by remember { mutableStateOf(false) }
     var isLoggingOut by remember { mutableStateOf(false) }
@@ -120,6 +119,22 @@ fun MainScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    LaunchedEffect(currentScreen) {
+        if (currentScreen == ScreenRoute.Recordings) {
+            viewModel.refreshRecordings()
+        }
+    }
+
+    if (currentScreen != ScreenRoute.Dialer) {
+        BackHandler {
+            if (currentScreen == ScreenRoute.AccountDetails) {
+                currentScreen = ScreenRoute.Accounts
+            } else {
+                currentScreen = ScreenRoute.Dialer
+            }
+        }
+    }
+
     // Handle logout transition
     if (isLoggingOut) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -134,44 +149,64 @@ fun MainScreen(
 
     ModalNavigationDrawer(
         drawerState = drawerState,
-        gesturesEnabled = currentScreen != ScreenRoute.AccountDetails && currentScreen != ScreenRoute.Chat,
+        gesturesEnabled = currentScreen != ScreenRoute.AccountDetails,
         drawerContent = {
             ModalDrawerSheet(
                 modifier = Modifier.width(280.dp),
                 drawerContainerColor = MaterialTheme.colorScheme.surface,
                 drawerShape = RoundedCornerShape(topEnd = 16.dp, bottomEnd = 16.dp)
             ) {
-                // Tighter Header
+                // Premium Styled Header with Signature Gradient Accent
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(160.dp)
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(GeminiPrimaryDark, GeminiPrimaryLight)
-                            )
-                        )
-                        .padding(16.dp),
-                    contentAlignment = Alignment.BottomStart
+                        .height(180.dp)
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
                 ) {
-                    Column {
-                        Image(
-                            painter = painterResource(id = R.drawable.ic_logo),
-                            contentDescription = "Logo",
-                            modifier = Modifier.size(80.dp)
-                        )
-                        Spacer(Modifier.height(4.dp))
+                    // Background gradient glow accent at the top
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(6.dp)
+                            .background(GeminiGlowBrush)
+                    )
+                    
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(20.dp),
+                        verticalArrangement = Arrangement.Bottom
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                            modifier = Modifier.size(72.dp),
+                            border = BorderStroke(1.5.dp, GeminiGlowBrush)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Image(
+                                    painter = painterResource(id = R.drawable.ic_logo),
+                                    contentDescription = "Logo",
+                                    modifier = Modifier.size(56.dp),
+                                    colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.primary)
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(12.dp))
                         Text(
                             "MK Softphone",
                             style = MaterialTheme.typography.titleMedium.copy(
-                                color = Color.White,
+                                color = MaterialTheme.colorScheme.onSurface,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 18.sp
                             )
                         )
                         Text(
-                            if (activeAccounts.isNotEmpty()) "${activeAccounts.size} active account(s)" else "Offline",
-                            style = MaterialTheme.typography.labelSmall.copy(color = Color.White.copy(alpha = 0.8f), fontSize = 11.sp)
+                            if (activeAccounts.isNotEmpty()) "${activeAccounts.size} Account(s) Active" else "System Offline",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 11.sp
+                            )
                         )
                     }
                 }
@@ -182,7 +217,7 @@ fun MainScreen(
                         .weight(1f)
                 ) {
                     if (activeAccounts.isNotEmpty()) {
-                        Box(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                        Box(modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)) {
                             val selectedAccount = activeAccounts[primaryAccountId] ?: activeAccounts.values.firstOrNull()
                             
                             OutlinedCard(
@@ -207,7 +242,7 @@ fun MainScreen(
                                     Spacer(Modifier.width(10.dp))
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            "Identity",
+                                            "Active Line",
                                             style = MaterialTheme.typography.labelSmall,
                                             color = MaterialTheme.colorScheme.primary,
                                             fontSize = 9.sp
@@ -256,11 +291,8 @@ fun MainScreen(
                         HorizontalDivider(modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp), thickness = 0.5.dp)
                     }
 
+                    // Keep only secondary administrative options in navigation drawer
                     val menuItems = listOf(
-                        ScreenRoute.Dialer to Icons.Default.Dialpad,
-                        ScreenRoute.Messaging to Icons.AutoMirrored.Filled.Message,
-                        ScreenRoute.History to Icons.Default.History,
-                        ScreenRoute.Contacts to Icons.Default.Contacts,
                         ScreenRoute.Accounts to Icons.Default.AccountBalanceWallet,
                         ScreenRoute.Settings to Icons.Default.Settings,
                         ScreenRoute.Recordings to Icons.Default.Mic
@@ -314,7 +346,7 @@ fun MainScreen(
     ) {
         Scaffold(
             topBar = {
-                if (currentScreen != ScreenRoute.AccountDetails && currentScreen != ScreenRoute.Chat) {
+                if (currentScreen != ScreenRoute.AccountDetails) {
                     CenterAlignedTopAppBar(
                         title = {
                             Text(
@@ -327,19 +359,7 @@ fun MainScreen(
                                 Icon(Icons.Default.Menu, contentDescription = "Menu")
                             }
                         },
-                        actions = {
-                            if (currentScreen == ScreenRoute.Dialer) {
-                                val unreadMessages by viewModel.messages.collectAsState()
-                                val unreadCount = unreadMessages.count { !it.isRead && it.isIncoming }
-                                if (unreadCount > 0) {
-                                    IconButton(onClick = { currentScreen = ScreenRoute.Messaging }) {
-                                        BadgedBox(badge = { Badge { Text(unreadCount.toString()) } }) {
-                                            Icon(Icons.Default.Notifications, contentDescription = "Unread Messages")
-                                        }
-                                    }
-                                }
-                            }
-                        },
+                        actions = {},
                         colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                             containerColor = MaterialTheme.colorScheme.surface,
                             titleContentColor = MaterialTheme.colorScheme.onSurface
@@ -348,30 +368,19 @@ fun MainScreen(
                 }
             },
             bottomBar = {
-                if (currentScreen != ScreenRoute.AccountDetails && currentScreen != ScreenRoute.Chat) {
+                if (currentScreen != ScreenRoute.AccountDetails) {
                     NavigationBar(
                         containerColor = MaterialTheme.colorScheme.surface,
                         tonalElevation = 8.dp
                     ) {
                         val navItems = listOf(
                             ScreenRoute.Dialer to Icons.Default.Dialpad,
-                            ScreenRoute.Messaging to Icons.AutoMirrored.Filled.Chat,
                             ScreenRoute.History to Icons.Default.History,
                             ScreenRoute.Contacts to Icons.Default.Contacts
                         )
                         navItems.forEach { (screen, icon) ->
                             NavigationBarItem(
-                                icon = {
-                                    if (screen == ScreenRoute.Messaging) {
-                                        val messages by viewModel.messages.collectAsState()
-                                        val count = messages.count { !it.isRead && it.isIncoming }
-                                        BadgedBox(badge = { if (count > 0) Badge { Text(count.toString()) } }) {
-                                            Icon(icon, contentDescription = stringResource(screen.titleRes))
-                                        }
-                                    } else {
-                                        Icon(icon, contentDescription = stringResource(screen.titleRes))
-                                    }
-                                },
+                                icon = { Icon(icon, contentDescription = stringResource(screen.titleRes)) },
                                 label = { Text(stringResource(screen.titleRes)) },
                                 selected = currentScreen == screen,
                                 onClick = { currentScreen = screen },
@@ -393,11 +402,7 @@ fun MainScreen(
                         ScreenRoute.Dialer -> DialerScreen(
                             accounts = activeAccounts,
                             primaryAccountId = primaryAccountId,
-                            onDial = { accountId, destUri -> viewModel.makeSipCall(accountId, destUri) },
-                            onChat = { peer ->
-                                currentChatPeer = if (peer.startsWith("sip:")) peer else "sip:$peer"
-                                currentScreen = ScreenRoute.Chat
-                            }
+                            onDial = { accountId, destUri -> viewModel.makeSipCall(accountId, destUri) }
                         )
                         ScreenRoute.History -> HistoryScreen(
                             history = callHistory,
@@ -407,10 +412,6 @@ fun MainScreen(
                                     val accId = primaryAccountId?.takeIf { activeAccounts.containsKey(it) } ?: activeAccounts.keys.first()
                                     viewModel.makeSipCall(accId, number)
                                 }
-                            },
-                            onChat = { peer ->
-                                currentChatPeer = peer
-                                currentScreen = ScreenRoute.Chat
                             }
                         )
                         ScreenRoute.Contacts -> ContactsScreen(
@@ -419,10 +420,6 @@ fun MainScreen(
                                     val accId = primaryAccountId?.takeIf { activeAccounts.containsKey(it) } ?: activeAccounts.keys.first()
                                     viewModel.makeSipCall(accId, address)
                                 }
-                            },
-                            onChat = { peer ->
-                                currentChatPeer = peer
-                                currentScreen = ScreenRoute.Chat
                             }
                         )
                         ScreenRoute.Accounts -> {
@@ -487,26 +484,7 @@ fun MainScreen(
                             onRefresh = { viewModel.refreshRecordings() },
                             onDelete = { file -> viewModel.deleteRecording(file) }
                         )
-                        ScreenRoute.Messaging -> {
-                            val messages by viewModel.messages.collectAsState()
-                            MessagingScreen(
-                                messages = messages,
-                                onChatSelected = { peer ->
-                                    currentChatPeer = peer
-                                    currentScreen = ScreenRoute.Chat
-                                    viewModel.markAsRead(peer)
-                                }
-                            )
-                        }
-                        ScreenRoute.Chat -> currentChatPeer?.let { peer ->
-                            val messages by viewModel.messages.collectAsState()
-                            ChatScreen(
-                                peerUri = peer,
-                                messages = messages.filter { it.peerUri == peer },
-                                onSendMessage = { content -> viewModel.sendSipMessage(peer, content) },
-                                onBack = { currentScreen = ScreenRoute.Messaging }
-                            )
-                        }
+                        // Messaging and Chat screens removed
                         ScreenRoute.AccountDetails -> currentAccount?.let { account ->
                             AccountDetailsScreen(
                                 account = account,

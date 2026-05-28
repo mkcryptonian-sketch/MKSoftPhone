@@ -239,11 +239,10 @@ fun ActiveCallOverlay(
             Column(
                 modifier = Modifier.fillMaxSize()
             ) {
-                // --- TOP SECTION: 28% Height, Glassmorphic (Active Call Info & Icons) ---
+                // --- TOP SECTION: Glassmorphic (Active Call Info & Icons) ---
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(0.28f)
                         .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.5f))
                         .border(
                             width = 1.dp,
@@ -256,8 +255,7 @@ fun ActiveCallOverlay(
                             shape = androidx.compose.ui.graphics.RectangleShape
                         )
                         .padding(horizontal = 24.dp, vertical = 16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.SpaceBetween
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     // Call Details Row
                     Row(
@@ -320,8 +318,9 @@ fun ActiveCallOverlay(
                         }
                     }
 
-                    // 5-Control Icons Row (Speaker, Mute, Keypad, Hold, More) wrapped in a translucent card dock
-                    Card(
+                    // 3x3 Action Grid wrapped in a translucent card dock
+                    if (call.callState == SipCallState.Confirmed) {
+                        Card(
                         shape = RoundedCornerShape(20.dp),
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
@@ -331,248 +330,145 @@ fun ActiveCallOverlay(
                             .fillMaxWidth()
                             .padding(horizontal = 4.dp, vertical = 4.dp)
                     ) {
-                        Row(
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 10.dp),
-                            horizontalArrangement = Arrangement.SpaceEvenly,
-                            verticalAlignment = Alignment.CenterVertically
+                                .padding(vertical = 12.dp, horizontal = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            // 1. Speaker
-                            val isSpeakerOn = call.isSpeakerphoneOn
-                            IconButton(
-                                onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    onToggleSpeaker(call.callId, !isSpeakerOn)
-                                },
-                                modifier = Modifier
-                                    .size(44.dp)
-                                    .clip(CircleShape)
-                                    .background(if (isSpeakerOn) GeminiPrimaryDark.copy(alpha = 0.2f) else Color.Transparent)
-                                    .border(1.5.dp, if (isSpeakerOn) GeminiPrimaryDark else Color.Transparent, CircleShape)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceEvenly
                             ) {
-                                Icon(
-                                    imageVector = Icons.Filled.VolumeUp,
-                                    contentDescription = "Speaker",
-                                    tint = if (isSpeakerOn) GeminiPrimaryDark else MaterialTheme.colorScheme.onSurface,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-
-                            // 2. Mute
-                            val isMuted = call.isMuted
-                            IconButton(
-                                onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    onMute(call.callId, !isMuted)
-                                },
-                                modifier = Modifier
-                                    .size(44.dp)
-                                    .clip(CircleShape)
-                                    .background(if (isMuted) GeminiPrimaryDark.copy(alpha = 0.2f) else Color.Transparent)
-                                    .border(1.5.dp, if (isMuted) GeminiPrimaryDark else Color.Transparent, CircleShape)
-                            ) {
-                                Icon(
-                                    imageVector = if (isMuted) Icons.Filled.MicOff else Icons.Filled.Mic,
-                                    contentDescription = "Mute",
-                                    tint = if (isMuted) GeminiPrimaryDark else MaterialTheme.colorScheme.onSurface,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-
-                            // 3. Keypad (Toggle DTMF Pad)
-                            IconButton(
-                                onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    showDialpad = !showDialpad
-                                },
-                                modifier = Modifier
-                                    .size(44.dp)
-                                    .clip(CircleShape)
-                                    .background(if (showDialpad) GeminiPrimaryDark.copy(alpha = 0.2f) else Color.Transparent)
-                                    .border(1.5.dp, if (showDialpad) GeminiPrimaryDark else Color.Transparent, CircleShape)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Dialpad,
-                                    contentDescription = "Keypad",
-                                    tint = if (showDialpad) GeminiPrimaryDark else MaterialTheme.colorScheme.onSurface,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-
-                            // 4. Hold
-                            val isOnHold = call.isLocalHold
-                            IconButton(
-                                onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    onHold(call.callId, !isOnHold)
-                                },
-                                modifier = Modifier
-                                    .size(44.dp)
-                                    .clip(CircleShape)
-                                    .background(if (isOnHold) GeminiPrimaryDark.copy(alpha = 0.2f) else Color.Transparent)
-                                    .border(1.5.dp, if (isOnHold) GeminiPrimaryDark else Color.Transparent, CircleShape)
-                            ) {
-                                Icon(
-                                    imageVector = if (isOnHold) Icons.Filled.PlayArrow else Icons.Filled.Pause,
-                                    contentDescription = "Hold",
-                                    tint = if (isOnHold) GeminiPrimaryDark else MaterialTheme.colorScheme.onSurface,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-
-                            // 5. More (Dropdown Menu following app theme)
-                            Box {
-                                IconButton(
+                                // 1. Mute
+                                val isMuted = call.isMuted
+                                CallActionButton(
+                                    icon = if (isMuted) Icons.Filled.MicOff else Icons.Filled.Mic,
+                                    label = "Mute",
+                                    isActive = isMuted,
                                     onClick = {
                                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        showMoreMenu = true
-                                    },
-                                    modifier = Modifier
-                                        .size(44.dp)
-                                        .clip(CircleShape)
-                                        .background(if (showMoreMenu) GeminiPrimaryDark.copy(alpha = 0.2f) else Color.Transparent)
-                                        .border(1.5.dp, if (showMoreMenu) GeminiPrimaryDark else Color.Transparent, CircleShape)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.MoreVert,
-                                        contentDescription = "More options",
-                                        tint = if (showMoreMenu) GeminiPrimaryDark else MaterialTheme.colorScheme.onSurface,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                }
-                                
-                                DropdownMenu(
-                                    expanded = showMoreMenu,
-                                    onDismissRequest = { showMoreMenu = false },
-                                    modifier = Modifier
-                                        .background(MaterialTheme.colorScheme.surface)
-                                        .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
-                                ) {
-                                    val isRecording = call.isRecording
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(
-                                                text = if (isRecording) "Stop Recording" else "Record Call",
-                                                color = MaterialTheme.colorScheme.onSurface
-                                            )
-                                        },
-                                        leadingIcon = {
-                                            Icon(
-                                                imageVector = if (isRecording) Icons.Filled.Stop else Icons.Filled.Mic,
-                                                contentDescription = null,
-                                                tint = if (isRecording) Color.Red else GeminiPrimaryDark
-                                            )
-                                        },
+                                        onMute(call.callId, !isMuted)
+                                    }
+                                )
+
+                                // 2. Keypad (DTMF)
+                                CallActionButton(
+                                    icon = Icons.Filled.Dialpad,
+                                    label = "Keypad",
+                                    isActive = showDialpad,
+                                    onClick = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        showDialpad = !showDialpad
+                                    }
+                                )
+
+                                // 3. Speakerphone
+                                val isSpeakerOn = call.isSpeakerphoneOn
+                                CallActionButton(
+                                    icon = Icons.Filled.VolumeUp,
+                                    label = "Speaker",
+                                    isActive = isSpeakerOn,
+                                    onClick = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        onToggleSpeaker(call.callId, !isSpeakerOn)
+                                    }
+                                )
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceEvenly
+                            ) {
+                                // 4. Hold
+                                val isOnHold = call.isLocalHold
+                                CallActionButton(
+                                    icon = if (isOnHold) Icons.Filled.PlayArrow else Icons.Filled.Pause,
+                                    label = if (isOnHold) "Resume" else "Hold",
+                                    isActive = isOnHold,
+                                    onClick = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        onHold(call.callId, !isOnHold)
+                                    }
+                                )
+
+                                // 5. Add Call or Merge Calls
+                                if (activeCalls.size > 1) {
+                                    CallActionButton(
+                                        icon = Icons.Filled.CallMerge,
+                                        label = "Merge",
+                                        isActive = false,
                                         onClick = {
-                                            showMoreMenu = false
-                                            onToggleRecord(call.callId, !isRecording)
-                                        }
-                                    )
-                                    
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(
-                                                text = if (call.isBluetoothOn) "Disable Bluetooth" else "Enable Bluetooth",
-                                                color = MaterialTheme.colorScheme.onSurface
-                                            )
-                                        },
-                                        leadingIcon = {
-                                            Icon(
-                                                imageVector = Icons.Filled.Bluetooth,
-                                                contentDescription = null,
-                                                tint = if (call.isBluetoothOn) GeminiPrimaryDark else MaterialTheme.colorScheme.onSurface
-                                            )
-                                        },
-                                        onClick = {
-                                            showMoreMenu = false
-                                            onToggleBluetooth(call.callId, !call.isBluetoothOn)
-                                        }
-                                    )
-                                    
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(
-                                                text = "Add Call",
-                                                color = MaterialTheme.colorScheme.onSurface
-                                            )
-                                        },
-                                        leadingIcon = {
-                                            Icon(
-                                                imageVector = Icons.Filled.Add,
-                                                contentDescription = null,
-                                                tint = GeminiPrimaryDark
-                                            )
-                                        },
-                                        onClick = {
-                                            showMoreMenu = false
-                                            onAddCall()
-                                        }
-                                    )
-                                    
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(
-                                                text = "Merge Calls (Conference)",
-                                                color = if (activeCalls.size > 1) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                                            )
-                                        },
-                                        leadingIcon = {
-                                            Icon(
-                                                imageVector = Icons.Filled.CallMerge,
-                                                contentDescription = null,
-                                                tint = if (activeCalls.size > 1) GeminiPrimaryDark else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                                            )
-                                        },
-                                        enabled = activeCalls.size > 1,
-                                        onClick = {
-                                            showMoreMenu = false
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                             onConference()
                                         }
                                     )
-
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(
-                                                text = "Transfer Call",
-                                                color = MaterialTheme.colorScheme.onSurface
-                                            )
-                                        },
-                                        leadingIcon = {
-                                            Icon(
-                                                imageVector = Icons.Filled.PhoneForwarded,
-                                                contentDescription = null,
-                                                tint = GeminiPrimaryDark
-                                            )
-                                        },
+                                } else {
+                                    CallActionButton(
+                                        icon = Icons.Filled.Add,
+                                        label = "Add Call",
+                                        isActive = false,
                                         onClick = {
-                                            showMoreMenu = false
-                                            showTransferDialog = true
-                                        }
-                                    )
-
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(
-                                                text = "Call Statistics",
-                                                color = MaterialTheme.colorScheme.onSurface
-                                            )
-                                        },
-                                        leadingIcon = {
-                                            Icon(
-                                                imageVector = Icons.Filled.Analytics,
-                                                contentDescription = null,
-                                                tint = GeminiPrimaryDark
-                                            )
-                                        },
-                                        onClick = {
-                                            showMoreMenu = false
-                                            showCallStats = true
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            onAddCall()
                                         }
                                     )
                                 }
+
+                                // 6. Record
+                                val isRecording = call.isRecording
+                                CallActionButton(
+                                    icon = if (isRecording) Icons.Filled.Stop else Icons.Filled.FiberManualRecord,
+                                    label = if (isRecording) "Recording" else "Record",
+                                    isActive = isRecording,
+                                    activeColor = Color.Red,
+                                    onClick = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        onToggleRecord(call.callId, !isRecording)
+                                    }
+                                )
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceEvenly
+                            ) {
+                                // 7. Bluetooth
+                                val isBluetoothOn = call.isBluetoothOn
+                                CallActionButton(
+                                    icon = Icons.Filled.Bluetooth,
+                                    label = "Bluetooth",
+                                    isActive = isBluetoothOn,
+                                    onClick = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        onToggleBluetooth(call.callId, !isBluetoothOn)
+                                    }
+                                )
+
+                                // 8. Transfer Call
+                                CallActionButton(
+                                    icon = Icons.Filled.PhoneForwarded,
+                                    label = "Transfer",
+                                    isActive = showTransferDialog,
+                                    onClick = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        showTransferDialog = true
+                                    }
+                                )
+
+                                // 9. Call Stats
+                                CallActionButton(
+                                    icon = Icons.Filled.Analytics,
+                                    label = "Statistics",
+                                    isActive = showCallStats,
+                                    onClick = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        showCallStats = true
+                                    }
+                                )
                             }
                         }
+                    }
                     }
                 }
 
@@ -582,7 +478,7 @@ fun ActiveCallOverlay(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .weight(0.72f)
+                            .weight(1f)
                             .background(MaterialTheme.colorScheme.background)
                             .padding(bottom = 24.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -694,7 +590,7 @@ fun ActiveCallOverlay(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .weight(0.72f)
+                            .weight(1f)
                             .background(MaterialTheme.colorScheme.background)
                             .padding(bottom = 32.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -977,14 +873,56 @@ fun CallStatsDialog(
                         Icon(Icons.Filled.Close, contentDescription = "Close")
                     }
                 }
-                
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Quality score badge
+                val qualityColor = when {
+                    stats.qualityScore >= 80 -> DialerCallGreen
+                    stats.qualityScore >= 50 -> Color(0xFFFFB300)  // Amber
+                    else                     -> DialerEndRed
+                }
+                val qualityLabel = when {
+                    stats.qualityScore >= 80 -> "Good"
+                    stats.qualityScore >= 50 -> "Fair"
+                    else                     -> "Poor"
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Quality:",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = qualityColor.copy(alpha = 0.15f)
+                    ) {
+                        Text(
+                            text = "$qualityLabel (${stats.qualityScore}%)",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            color = qualityColor,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(16.dp))
-                
+
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     item {
-                        StatRow("Codec", "${stats.codecName} (${stats.clockRate}Hz)")
+                        val codecDisplay = if (stats.clockRate > 0L)
+                            "${stats.codecName} / ${stats.clockRate / 1000}kHz"
+                        else
+                            stats.codecName
+                        StatRow("Codec", codecDisplay)
+                    }
+                    item {
+                        StatRow("Security", stats.securityProto)
                     }
                     item {
                         StatRow("RTT (Latency)", "${stats.rttMs} ms")
@@ -996,25 +934,31 @@ fun CallStatsDialog(
                         StatRow("TX Jitter", "${stats.txJitterMs} ms")
                     }
                     item {
-                        StatRow("RX Packet Loss", "${stats.rxLoss} pkts")
+                        // rxLoss is stored as a percentage integer (0-100)
+                        StatRow("RX Packet Loss", "${stats.rxLoss}%")
                     }
                     item {
-                        StatRow("TX Packet Loss", "${stats.txLoss} pkts")
+                        StatRow("TX Packet Loss", "${stats.txLoss}%")
                     }
                     item {
-                        StatRow("Jitter Buffer", "${stats.jbAvgDelayMs}ms (avg) / ${stats.jbMaxDelayMs}ms (max)")
+                        StatRow("Jitter Buffer", "${stats.jbCurrentSize} ms")
                     }
                     item {
-                        StatRow("Data Sent", formatBytes(stats.txBytes))
+                        // txBytes here is bytes-per-second from bandwidth reading
+                        StatRow("Upload", "${formatBps(stats.txBytes)}")
                     }
                     item {
-                        StatRow("Data Received", formatBytes(stats.rxBytes))
+                        StatRow("Download", "${formatBps(stats.rxBytes)}")
                     }
-                    item {
-                        StatRow("Local Addr", stats.localRtpAddress.substringAfter("sip:").substringBefore(";"))
+                    if (stats.localRtpAddress.isNotBlank()) {
+                        item {
+                            StatRow("Local RTP", stats.localRtpAddress)
+                        }
                     }
-                    item {
-                        StatRow("Remote Addr", stats.remoteRtpAddress.substringAfter("sip:").substringBefore(";"))
+                    if (stats.remoteRtpAddress.isNotBlank()) {
+                        item {
+                            StatRow("Remote RTP", stats.remoteRtpAddress)
+                        }
                     }
                 }
             }
@@ -1046,4 +990,14 @@ fun formatBytes(bytes: Long): String {
     if (bytes < 1024) return "$bytes B"
     if (bytes < 1024 * 1024) return String.format("%.1f KB", bytes / 1024.0)
     return String.format("%.1f MB", bytes / (1024.0 * 1024.0))
+}
+
+/** Format bytes/second as a human-readable bitrate string. */
+fun formatBps(bytesPerSec: Long): String {
+    val bps = bytesPerSec * 8L  // convert to bits/s
+    return when {
+        bps < 1_000      -> "${bps} bps"
+        bps < 1_000_000  -> String.format("%.1f kbps", bps / 1_000.0)
+        else             -> String.format("%.2f Mbps", bps / 1_000_000.0)
+    }
 }

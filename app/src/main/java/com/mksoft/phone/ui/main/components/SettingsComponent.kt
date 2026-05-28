@@ -47,8 +47,6 @@ fun SettingsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text("VoIP System Settings", style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold))
-
             // Service Status Card
             Card(
                 shape = RoundedCornerShape(24.dp),

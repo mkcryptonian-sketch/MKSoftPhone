@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -140,16 +141,12 @@ fun LoginScreen(
             Card(
                 shape = RoundedCornerShape(28.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                    containerColor = com.mksoft.phone.theme.GlassBg
                 ),
                 modifier = Modifier.fillMaxWidth(),
-                border = CardDefaults.outlinedCardBorder().copy(
-                    brush = Brush.linearGradient(
-                        colors = listOf(
-                            MaterialTheme.colorScheme.onBackground.copy(alpha = 0.12f),
-                            MaterialTheme.colorScheme.onBackground.copy(alpha = 0.01f)
-                        )
-                    )
+                border = BorderStroke(
+                    width = 1.dp,
+                    color = com.mksoft.phone.theme.GlassBorder
                 )
             ) {
                 Column(

@@ -123,41 +123,32 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun checkSpecialPermissions() {
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+        }
+    }
+
+    /**
+     * Checks the status of special Android permissions required for reliable background calling.
+     * This function ONLY logs status — it does NOT auto-launch system settings screens.
+     * Users are guided via the in-app OnboardingScreen instead.
+     */
+    internal fun checkSpecialPermissions() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
             if (!powerManager.isIgnoringBatteryOptimizations(packageName)) {
-                try {
-                    val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                        data = android.net.Uri.parse("package:$packageName")
-                    }
-                    startActivity(intent)
-                    return
-                } catch (e: Exception) {
-                    android.util.Log.e("MainActivity", "Failed to launch battery optimization settings", e)
-                }
+                android.util.Log.i("MainActivity", "Battery optimization not ignored — user should grant via onboarding")
             }
-
             if (!Settings.canDrawOverlays(this)) {
-                try {
-                    val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION).apply {
-                        data = android.net.Uri.parse("package:$packageName")
-                    }
-                    startActivity(intent)
-                    return
-                } catch (e: Exception) {
-                    android.util.Log.e("MainActivity", "Failed to launch overlay permission settings", e)
-                }
+                android.util.Log.i("MainActivity", "Draw over other apps not granted — user should grant via onboarding")
             }
-
-            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
-            if (!notificationManager.isNotificationPolicyAccessGranted) {
-                try {
-                    val intent = Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
-                    startActivity(intent)
-                } catch (e: Exception) {
-                    android.util.Log.e("MainActivity", "Failed to launch DND settings", e)
-                }
+            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            if (!nm.isNotificationPolicyAccessGranted) {
+                android.util.Log.i("MainActivity", "DND policy access not granted — user should grant via onboarding")
             }
         }
     }

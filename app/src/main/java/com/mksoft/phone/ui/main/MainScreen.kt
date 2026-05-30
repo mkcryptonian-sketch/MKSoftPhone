@@ -97,7 +97,15 @@ fun MainScreen(
     val callStats by viewModel.callStats.collectAsState()
 
     var currentScreen by remember { mutableStateOf(ScreenRoute.Dialer) }
+    var selectedSettingsSection by remember { mutableStateOf(SettingsSection.Identity) }
+    var isSettingsExpanded by remember { mutableStateOf(false) }
     var currentAccount by remember { mutableStateOf<SipAccountConfig?>(null) }
+
+    LaunchedEffect(currentScreen) {
+        if (currentScreen == ScreenRoute.Settings) {
+            isSettingsExpanded = true
+        }
+    }
     var showLogoutConfirm by remember { mutableStateOf(false) }
     var showExitConfirm by remember { mutableStateOf(false) }
     var isLoggingOut by remember { mutableStateOf(false) }
@@ -211,10 +219,11 @@ fun MainScreen(
                     }
                 }
 
-                // Tight Content Column
+                // Tight Content Column - Scrollable to prevent overflow
                 Column(
                     modifier = Modifier
                         .weight(1f)
+                        .verticalScroll(rememberScrollState())
                 ) {
                     if (activeAccounts.isNotEmpty()) {
                         Box(modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)) {
@@ -259,7 +268,7 @@ fun MainScreen(
                                     Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(16.dp))
                                 }
                             }
-
+ 
                             DropdownMenu(
                                 expanded = showAccountDropdown,
                                 onDismissRequest = { showAccountDropdown = false },
@@ -290,32 +299,108 @@ fun MainScreen(
                         }
                         HorizontalDivider(modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp), thickness = 0.5.dp)
                     }
-
-                    // Keep only secondary administrative options in navigation drawer
-                    val menuItems = listOf(
-                        ScreenRoute.Accounts to Icons.Default.AccountBalanceWallet,
-                        ScreenRoute.Settings to Icons.Default.Settings,
-                        ScreenRoute.Recordings to Icons.Default.Mic
-                    )
-
-                    menuItems.forEach { (screen, icon) ->
-                        NavigationDrawerItem(
-                            icon = { Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                            label = { Text(stringResource(screen.titleRes), fontSize = 13.sp) },
-                            selected = currentScreen == screen,
-                            onClick = {
-                                currentScreen = screen
-                                scope.launch { drawerState.close() }
-                            },
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 0.dp),
-                            shape = RoundedCornerShape(8.dp),
-                            colors = NavigationDrawerItemDefaults.colors(
-                                selectedContainerColor = GeminiPrimaryDark.copy(alpha = 0.1f),
-                                selectedIconColor = GeminiPrimaryDark,
-                                selectedTextColor = GeminiPrimaryDark
-                            )
+ 
+                    // Accounts Item
+                    NavigationDrawerItem(
+                        icon = { Icon(imageVector = Icons.Default.AccountBalanceWallet, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                        label = { Text(stringResource(ScreenRoute.Accounts.titleRes), fontSize = 13.sp) },
+                        selected = currentScreen == ScreenRoute.Accounts,
+                        onClick = {
+                            currentScreen = ScreenRoute.Accounts
+                            scope.launch { drawerState.close() }
+                        },
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 0.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = NavigationDrawerItemDefaults.colors(
+                            selectedContainerColor = GeminiPrimaryDark.copy(alpha = 0.1f),
+                            selectedIconColor = GeminiPrimaryDark,
+                            selectedTextColor = GeminiPrimaryDark
                         )
+                    )
+ 
+                    Spacer(modifier = Modifier.height(4.dp))
+ 
+                    // Settings Collapsible Item Group
+                    val isSettingsActive = currentScreen == ScreenRoute.Settings
+                    NavigationDrawerItem(
+                        icon = { Icon(imageVector = Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                        label = { Text("Settings", fontSize = 13.sp) },
+                        selected = isSettingsActive,
+                        badge = {
+                            Icon(
+                                imageVector = if (isSettingsExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = if (isSettingsActive) GeminiPrimaryDark else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            )
+                        },
+                        onClick = {
+                            isSettingsExpanded = !isSettingsExpanded
+                            if (currentScreen != ScreenRoute.Settings) {
+                                currentScreen = ScreenRoute.Settings
+                            }
+                        },
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 0.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = NavigationDrawerItemDefaults.colors(
+                            selectedContainerColor = GeminiPrimaryDark.copy(alpha = 0.1f),
+                            selectedIconColor = GeminiPrimaryDark,
+                            selectedTextColor = GeminiPrimaryDark
+                        )
+                    )
+ 
+                    if (isSettingsExpanded) {
+                        Column(
+                            modifier = Modifier
+                                .padding(start = 16.dp)
+                                .animateContentSize()
+                        ) {
+                            SettingsSection.entries.forEach { section ->
+                                val isSelected = isSettingsActive && selectedSettingsSection == section
+                                NavigationDrawerItem(
+                                    icon = { Icon(imageVector = section.icon, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                                    label = { Text(section.label, fontSize = 12.sp) },
+                                    selected = isSelected,
+                                    onClick = {
+                                        selectedSettingsSection = section
+                                        currentScreen = ScreenRoute.Settings
+                                        scope.launch { drawerState.close() }
+                                    },
+                                    modifier = Modifier
+                                        .padding(horizontal = 8.dp, vertical = 1.dp)
+                                        .height(40.dp),
+                                    shape = RoundedCornerShape(8.dp),
+                                    colors = NavigationDrawerItemDefaults.colors(
+                                        selectedContainerColor = GeminiPrimaryDark.copy(alpha = 0.08f),
+                                        selectedIconColor = GeminiPrimaryDark,
+                                        selectedTextColor = GeminiPrimaryDark,
+                                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                                    )
+                                )
+                            }
+                        }
                     }
+ 
+                    Spacer(modifier = Modifier.height(4.dp))
+ 
+                    // Recordings Item
+                    NavigationDrawerItem(
+                        icon = { Icon(imageVector = Icons.Default.Mic, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                        label = { Text(stringResource(ScreenRoute.Recordings.titleRes), fontSize = 13.sp) },
+                        selected = currentScreen == ScreenRoute.Recordings,
+                        onClick = {
+                            currentScreen = ScreenRoute.Recordings
+                            scope.launch { drawerState.close() }
+                        },
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 0.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = NavigationDrawerItemDefaults.colors(
+                            selectedContainerColor = GeminiPrimaryDark.copy(alpha = 0.1f),
+                            selectedIconColor = GeminiPrimaryDark,
+                            selectedTextColor = GeminiPrimaryDark
+                        )
+                    )
                 }
 
                 // Footer items
@@ -477,7 +562,8 @@ fun MainScreen(
                             serviceRunning = serviceRunning,
                             onToggleService = { running ->
                                 if (running) viewModel.startSipService() else viewModel.stopSipService()
-                            }
+                            },
+                            selectedSection = selectedSettingsSection
                         )
                         ScreenRoute.Recordings -> RecordingsScreen(
                             recordings = recordings,

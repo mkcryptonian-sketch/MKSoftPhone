@@ -20,6 +20,7 @@ import com.mksoft.phone.data.DefaultDataRepository
 import com.mksoft.phone.receiver.CallActionReceiver
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.combine
+import com.mksoft.phone.core.ConnectivityObserver
 
 class SipService : Service(), android.hardware.SensorEventListener {
 
@@ -75,6 +76,8 @@ class SipService : Service(), android.hardware.SensorEventListener {
     private var proximitySensor: android.hardware.Sensor? = null
     private var proximityWakeLock: PowerManager.WakeLock? = null
 
+    private var connectivityObserver: ConnectivityObserver? = null
+
     override fun onCreate() {
         super.onCreate()
         isRunning.value = true
@@ -93,6 +96,10 @@ class SipService : Service(), android.hardware.SensorEventListener {
         }
         
         observeSettingsChanges()
+
+        // Start network observer so WiFi/mobile switches trigger SIP re-registration
+        connectivityObserver = ConnectivityObserver(applicationContext)
+        connectivityObserver?.start()
     }
 
     private fun observeSettingsChanges() {
@@ -135,9 +142,12 @@ class SipService : Service(), android.hardware.SensorEventListener {
             sipEngineManager = SipEngineManager.getInstance(applicationContext)
         }
 
+        if (intent?.action != ACTION_STOP) {
+            startForegroundWithNotification()
+        }
+
         when (intent?.action) {
             ACTION_START -> {
-                startForegroundWithNotification()
                 sipEngineManager.initialize()
                 // Force a registration sync on every start (critical for push wakeups)
                 serviceScope.launch {
@@ -201,7 +211,12 @@ class SipService : Service(), android.hardware.SensorEventListener {
             ACTION_STOP -> {
                 cancelKeepAliveAlarm()
                 sipEngineManager.shutdown()
-                stopForeground(true)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                } else {
+                    @Suppress("DEPRECATION")
+                    stopForeground(true)
+                }
                 stopSelf()
             }
         }
@@ -223,6 +238,7 @@ class SipService : Service(), android.hardware.SensorEventListener {
         Log.d(TAG, "SipService Destroyed")
         cancelKeepAliveAlarm()
         unregisterProximitySensor()
+        connectivityObserver?.stop()
         releaseLocks()
         serviceScope.cancel()
     }
@@ -243,7 +259,7 @@ class SipService : Service(), android.hardware.SensorEventListener {
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
         wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "VoIPApp::SipServiceWakeLock").apply {
             setReferenceCounted(false)
-            acquire()
+            acquire() // Held indefinitely; released explicitly in releaseLocks() or onDestroy()
         }
 
         val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
@@ -393,7 +409,8 @@ class SipService : Service(), android.hardware.SensorEventListener {
                             val activeCall = activeCallsList.first()
                             title = getString(R.string.service_active_call_title)
                             text = getString(R.string.service_active_call_text, activeCall.peerUri)
-                            requireMicrophone = activeCallsList.any { it.callState == SipCallState.Confirmed }
+                            // Require microphone foreground type for any call state to ensure early media works
+                            requireMicrophone = true
                         } else {
                             val registeredCount = accounts.values.count { 
                                 it.registrationState is com.mksoft.phone.core.sip.RegistrationState.Registered 

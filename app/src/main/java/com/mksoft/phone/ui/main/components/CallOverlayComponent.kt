@@ -435,15 +435,22 @@ fun ActiveCallOverlay(
                             ) {
                                 // 7. Bluetooth
                                 val isBluetoothOn = call.isBluetoothOn
-                                CallActionButton(
-                                    icon = Icons.Filled.Bluetooth,
-                                    label = "Bluetooth",
-                                    isActive = isBluetoothOn,
-                                    onClick = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        onToggleBluetooth(call.callId, !isBluetoothOn)
-                                    }
-                                )
+                                val isBluetoothAvailable = call.isBluetoothAvailable
+                                Box(modifier = if (!isBluetoothAvailable) Modifier.graphicsLayer { alpha = 0.5f } else Modifier) {
+                                    CallActionButton(
+                                        icon = Icons.Filled.Bluetooth,
+                                        label = "Bluetooth",
+                                        isActive = isBluetoothOn && isBluetoothAvailable,
+                                        onClick = {
+                                            if (isBluetoothAvailable) {
+                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                onToggleBluetooth(call.callId, !isBluetoothOn)
+                                            } else {
+                                                android.widget.Toast.makeText(context, "No Bluetooth device available", android.widget.Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                    )
+                                }
 
                                 // 8. Transfer Call
                                 CallActionButton(

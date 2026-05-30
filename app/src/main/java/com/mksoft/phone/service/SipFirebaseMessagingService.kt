@@ -19,7 +19,7 @@ class SipFirebaseMessagingService : FirebaseMessagingService() {
 
     companion object {
         private const val TAG = "SipFcmService"
-        private const val WAKE_LOCK_TIMEOUT_MS = 15000L // 15 seconds max execution window
+        private const val WAKE_LOCK_TIMEOUT_MS = 30000L // 30 seconds max execution window
     }
 
     private lateinit var sipEngineManager: SipEngineManager
@@ -82,7 +82,7 @@ class SipFirebaseMessagingService : FirebaseMessagingService() {
 
                 // Wait briefly for engine to become ready then re-register all accounts
                 // This ensures our SIP registration is active when the INVITE arrives
-                withTimeoutOrNull(10_000L) {
+                withTimeoutOrNull(25_000L) {
                     while (sipEngineManager.engineState.value !is SipEngineState.Ready) {
                         delay(200)
                     }

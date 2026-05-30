@@ -52,6 +52,7 @@ data class CallWrapper(
     val isRecording: Boolean = false,
     val isSpeakerphoneOn: Boolean = false,
     val isBluetoothOn: Boolean = false,
+    val isBluetoothAvailable: Boolean = false,
     val connectTimestamp: Long? = null,
     val isIncoming: Boolean = false,
     val isThirdParty: Boolean = false,

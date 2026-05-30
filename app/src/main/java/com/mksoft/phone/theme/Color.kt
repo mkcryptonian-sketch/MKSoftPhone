@@ -70,3 +70,9 @@ val DialerCallGreen = Color(0xFF00E676) // Vivid green for "answer"
 val DialerEndRed    = Color(0xFFFF1744) // Vivid red for "hang up"
 val GlassBg         = Color(0x1AFFFFFF) // Frosted glass fill
 val GlassBorder     = Color(0x33FFFFFF) // Frosted glass border
+
+// ─────────────────────────────────────────────────────────────
+//  Settings Redesign Accent
+// ─────────────────────────────────────────────────────────────
+val SettingsAccentPurple      = Color(0xFF534AB7)
+val SettingsAccentPurpleLight = Color(0xFFEEEDFE)

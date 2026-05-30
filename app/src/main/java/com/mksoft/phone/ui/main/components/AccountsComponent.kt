@@ -22,14 +22,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.zIndex
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.zIndex
 import com.mksoft.phone.core.sip.AccountWrapper
 import com.mksoft.phone.core.sip.RegistrationState
 import com.mksoft.phone.data.SipAccountConfig
 import com.mksoft.phone.data.SipCodecConfig
+import com.mksoft.phone.data.VoIpSettings
 import com.mksoft.phone.theme.DialerCallGreen
 import com.mksoft.phone.theme.GeminiPrimaryDark
 import com.mksoft.phone.ui.main.MainScreenViewModel
@@ -360,7 +361,8 @@ fun AccountDetailsScreen(
     account: SipAccountConfig,
     onBack: () -> Unit,
     onSave: (SipAccountConfig) -> Unit,
-    onSetPrimary: (String) -> Unit
+    onSetPrimary: (String) -> Unit,
+    globalSettings: VoIpSettings = VoIpSettings()
 ) {
     var editedAccount by remember(account) { mutableStateOf(account) }
     
@@ -464,10 +466,168 @@ fun AccountDetailsScreen(
                 }
             }
         }
-        
+
         Spacer(modifier = Modifier.height(16.dp))
-        
-        // Advanced Settings Card (Codecs Priorities)
+
+        // ── Encryption & Security Card ──────────────────────────────────
+        Card(
+            shape = RoundedCornerShape(28.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+        ) {
+            Column(modifier = Modifier.padding(24.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.Lock,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "Encryption & Security",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // Warning banner
+                Surface(
+                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(10.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Icon(
+                            Icons.Default.WarningAmber,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(16.dp).padding(top = 2.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "Leave all encryption OFF by default. Enable only if your SIP provider explicitly supports it — wrong settings will prevent calls.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // ─ SRTP media encryption (3-state) ────────────────────────
+                Text(
+                    "SRTP Media Encryption",
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium)
+                )
+                Text(
+                    "Encrypts RTP audio packets. Optional = offer SRTP but accept unencrypted. Mandatory = reject calls without SRTP.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    modifier = Modifier.padding(bottom = 8.dp, top = 2.dp)
+                )
+                var srtpExpanded by remember { mutableStateOf(false) }
+                val srtpOptions = listOf(
+                    Triple(0, "Disabled",  "No media encryption (works with all providers)"),
+                    Triple(1, "Optional",  "Offer SRTP, accept if provider agrees"),
+                    Triple(2, "Mandatory", "Refuse calls without SRTP encryption")
+                )
+                val srtpLabel = srtpOptions.find { it.first == editedAccount.srtpMode }?.second ?: "Disabled"
+                Box {
+                    OutlinedTextField(
+                        value = srtpLabel,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("SRTP Mode") },
+                        modifier = Modifier.fillMaxWidth(),
+                        trailingIcon = {
+                            IconButton(onClick = { srtpExpanded = true }) {
+                                Icon(Icons.Default.ArrowDropDown, "SRTP mode")
+                            }
+                        }
+                    )
+                    DropdownMenu(expanded = srtpExpanded, onDismissRequest = { srtpExpanded = false }) {
+                        srtpOptions.forEach { (mode, label, desc) ->
+                            DropdownMenuItem(
+                                text = {
+                                    Column {
+                                        Text(label, style = MaterialTheme.typography.bodyMedium)
+                                        Text(desc, style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                                    }
+                                },
+                                onClick = {
+                                    editedAccount = editedAccount.copy(srtpMode = mode)
+                                    srtpExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // ─ ZRTP ───────────────────────────────────────────────────
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                        Text("ZRTP Key Exchange",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium))
+                        Text("End-to-end key agreement for media. ZRTP-capable providers only.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                    }
+                    Switch(
+                        checked = editedAccount.zrtpEnabled,
+                        onCheckedChange = { editedAccount = editedAccount.copy(zrtpEnabled = it) }
+                    )
+                }
+
+                // ─ LIME E2EE ───────────────────────────────────────────────
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                        Text("LIME E2EE",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium))
+                        Text("End-to-end encryption for calls + messages. Requires LIME server on your provider.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                    }
+                    Switch(
+                        checked = editedAccount.limeEnabled,
+                        onCheckedChange = { editedAccount = editedAccount.copy(limeEnabled = it) }
+                    )
+                }
+
+                // ─ ZRTP SAS Display ──────────────────────────────────────────
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                        Text("ZRTP SAS Display",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium))
+                        Text("Show Short Authentication String during calls for manual verification.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                    }
+                    Switch(
+                        checked = editedAccount.zrtpSasDisplayEnabled,
+                        onCheckedChange = { editedAccount = editedAccount.copy(zrtpSasDisplayEnabled = it) }
+                    )
+                }
+            }
+        }
+
         Card(
             shape = RoundedCornerShape(28.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
@@ -483,7 +643,7 @@ fun AccountDetailsScreen(
                 Spacer(modifier = Modifier.height(16.dp))
                 
                 var codecsList by remember(editedAccount.id) {
-                    mutableStateOf(editedAccount.getNormalizedCodecs())
+                    mutableStateOf(editedAccount.getNormalizedCodecs(globalSettings.globalCodecs))
                 }
                 var draggedIndex by remember { mutableStateOf<Int?>(null) }
                 var dragOffset by remember { mutableStateOf(0f) }

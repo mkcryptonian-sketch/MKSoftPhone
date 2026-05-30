@@ -28,7 +28,11 @@ class KeepAliveReceiver : BroadcastReceiver() {
             val serviceIntent = Intent(context, SipService::class.java).apply {
                 action = SipService.ACTION_SCHEDULE_ALARM
             }
-            context.startService(serviceIntent)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                context.startForegroundService(serviceIntent)
+            } else {
+                context.startService(serviceIntent)
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Error handling keep-alive alarm: ${e.message}", e)
         } finally {

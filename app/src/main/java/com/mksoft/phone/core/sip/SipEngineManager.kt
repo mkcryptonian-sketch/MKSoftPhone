@@ -347,6 +347,21 @@ class SipEngineManager private constructor(private val context: Context) {
                 }
                 _activeCalls.value = callMap.toMap()
 
+                // Stop ringtone and hide incoming UI when any incoming call is answered/connected
+                if (isIncoming && (state == Call.State.Connected || state == Call.State.StreamsRunning)) {
+                    val hideIntent = android.content.Intent(context, SipService::class.java).apply {
+                        action = SipService.ACTION_HIDE_INCOMING_CALL_UI
+                        putExtra(SipService.EXTRA_CALL_ID, callId)
+                    }
+                    sipScope.launch {
+                        try {
+                            context.startService(hideIntent)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Failed to stop ringtone on answer: ${e.message}")
+                        }
+                    }
+                }
+
                 // Telecom integration connection updates
                 val connection = connections[callId]
                 if (connection != null) {
@@ -834,20 +849,30 @@ class SipEngineManager private constructor(private val context: Context) {
                 enabledMimes.addAll(listOf("opus", "g722", "pcmu", "pcma"))
             }
 
+            // Enable/disable each payload type
             audioCodecs.forEach { payloadType ->
                 val mime = payloadType.mimeType.lowercase()
                 val isEnabled = enabledMimes.contains(mime)
                 payloadType.enable(isEnabled)
-                
+            }
+
+            // Sort audio codecs such that enabled ones come first (ordered by latencyPriority), and disabled ones go to the end
+            val sortedCodecs = audioCodecs.sortedWith(compareBy<PayloadType> { payloadType ->
+                val mime = payloadType.mimeType.lowercase()
+                val isEnabled = enabledMimes.contains(mime)
                 if (isEnabled) {
-                    // Adjust priority based on our latency list
                     val index = latencyPriority.indexOf(mime)
                     if (index != -1) {
-                        // Linphone higher number = higher priority
-                        payloadType.number = 100 - index 
+                        index
+                    } else {
+                        latencyPriority.size
                     }
+                } else {
+                    Int.MAX_VALUE
                 }
-            }
+            })
+
+            core.setAudioPayloadTypes(sortedCodecs.toTypedArray())
             Log.d(TAG, "Codec priorities updated globally for all active accounts with latency optimization")
         } catch (e: Exception) {
             Log.e(TAG, "Error updating codec priorities: ${e.message}", e)
@@ -1406,54 +1431,160 @@ class SipEngineManager private constructor(private val context: Context) {
         Log.d(TAG, "Mute status updated for call $callId to $mute")
     }
 
-    fun updateCallAudioRoute(callId: Int, isSpeakerphoneOn: Boolean, isBluetoothOn: Boolean) {
+    fun updateCallAudioRoute(callId: Int, isSpeakerphoneOn: Boolean, isBluetoothOn: Boolean, isBluetoothAvailable: Boolean) {
         val current = callMap[callId]
         if (current != null) {
-            callMap[callId] = current.copy(isSpeakerphoneOn = isSpeakerphoneOn, isBluetoothOn = isBluetoothOn)
+            callMap[callId] = current.copy(
+                isSpeakerphoneOn = isSpeakerphoneOn,
+                isBluetoothOn = isBluetoothOn,
+                isBluetoothAvailable = isBluetoothAvailable
+            )
             _activeCalls.value = callMap.toMap()
-            Log.d(TAG, "updateCallAudioRoute: callId $callId, isSpeakerphoneOn = $isSpeakerphoneOn, isBluetoothOn = $isBluetoothOn")
+            Log.d(TAG, "updateCallAudioRoute: callId $callId, isSpeakerphoneOn = $isSpeakerphoneOn, isBluetoothOn = $isBluetoothOn, isBluetoothAvailable = $isBluetoothAvailable")
+
+            // Sync Linphone native audio devices with Telecom route to prevent speaker/SCO conflict
+            try {
+                if (::core.isInitialized) {
+                    val call = linphoneCalls[callId]
+                    if (call != null) {
+                        val targetType = when {
+                            isBluetoothOn -> AudioDevice.Type.Bluetooth
+                            isSpeakerphoneOn -> AudioDevice.Type.Speaker
+                            else -> AudioDevice.Type.Earpiece
+                        }
+                        
+                        val device = core.audioDevices.find {
+                            it.type == targetType && it.hasCapability(AudioDevice.Capabilities.CapabilityPlay)
+                        }
+                        if (device != null) {
+                            call.outputAudioDevice = device
+                            Log.d(TAG, "Sync: Linphone output audio device synced to: ${device.deviceName} ($targetType)")
+                        } else {
+                            call.outputAudioDevice = null
+                            Log.d(TAG, "Sync: Linphone output audio device cleared (set to null) for type $targetType to allow system default routing")
+                        }
+
+                        val inputDeviceType = if (isBluetoothOn) AudioDevice.Type.Bluetooth else AudioDevice.Type.Microphone
+                        val inputDevice = core.audioDevices.find {
+                            it.type == inputDeviceType && it.hasCapability(AudioDevice.Capabilities.CapabilityRecord)
+                        }
+                        if (inputDevice != null) {
+                            call.inputAudioDevice = inputDevice
+                            Log.d(TAG, "Sync: Linphone input audio device synced to: ${inputDevice.deviceName} ($inputDeviceType)")
+                        } else {
+                            call.inputAudioDevice = null
+                            Log.d(TAG, "Sync: Linphone input audio device cleared (set to null) for type $inputDeviceType to allow system default routing")
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error syncing Linphone native devices with Telecom route: ${e.message}")
+            }
+        }
+    }
+
+    fun updateMuteState(callId: Int, isMuted: Boolean) {
+        val current = callMap[callId]
+        if (current != null) {
+            callMap[callId] = current.copy(isMuted = isMuted)
+            _activeCalls.value = callMap.toMap()
+            Log.d(TAG, "updateMuteState: callId $callId, isMuted = $isMuted")
+        }
+    }
+
+    fun setNetworkReachable(reachable: Boolean) {
+        sipScope.launch(Dispatchers.Main) {
+            try {
+                if (::core.isInitialized) {
+                    core.isNetworkReachable = reachable
+                    Log.d(TAG, "Linphone core.isNetworkReachable set to: $reachable")
+                    if (!reachable) {
+                        accountMap.keys.forEach { accId ->
+                            val current = accountMap[accId]
+                            if (current != null) {
+                                accountMap[accId] = current.copy(
+                                    registrationState = RegistrationState.Idle
+                                )
+                            }
+                        }
+                        _activeAccounts.value = accountMap.toMap()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error setting network reachable: ${e.message}")
+            }
         }
     }
 
     fun toggleSpeakerphone(callId: Int, on: Boolean) {
-        // 1. Update Telecom route
+        // 1. Update Telecom route if connection is present
         val connection = getConnection(callId)
         if (connection != null) {
             connection.setSpeakerphoneOn(on)
-        }
+            Log.d(TAG, "toggleSpeakerphone: Delegated speakerphone toggling ($on) to Telecom Connection")
+        } else {
+            // 2. Update Linphone native audio device (Fallback when no active Connection)
+            try {
+                val call = linphoneCalls[callId] ?: return
+                val deviceType = if (on) AudioDevice.Type.Speaker else AudioDevice.Type.Earpiece
+                val device = core.audioDevices.find {
+                    it.type == deviceType && it.hasCapability(AudioDevice.Capabilities.CapabilityPlay)
+                }
+                if (device != null) {
+                    call.outputAudioDevice = device
+                    Log.d(TAG, "Linphone output audio device set to: ${device.deviceName} ($deviceType)")
+                } else {
+                    Log.w(TAG, "Linphone: No Speaker/Earpiece device found for output")
+                }
 
-        // 2. Update Linphone native audio device (Redundancy for better device support)
-        try {
-            val call = linphoneCalls[callId] ?: return
-            val deviceType = if (on) AudioDevice.Type.Speaker else AudioDevice.Type.Earpiece
-            val device = core.audioDevices.find { it.type == deviceType }
-            if (device != null) {
-                call.outputAudioDevice = device
-                Log.d(TAG, "Linphone output audio device set to: ${device.deviceName} ($deviceType)")
+                // Match with Microphone for input
+                val inputDevice = core.audioDevices.find {
+                    it.type == AudioDevice.Type.Microphone && it.hasCapability(AudioDevice.Capabilities.CapabilityRecord)
+                }
+                if (inputDevice != null) {
+                    call.inputAudioDevice = inputDevice
+                    Log.d(TAG, "Linphone input audio device set to: ${inputDevice.deviceName} (Microphone)")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error setting Linphone audio device: ${e.message}")
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error setting Linphone audio device: ${e.message}")
         }
     }
 
     fun toggleBluetooth(callId: Int, on: Boolean) {
-        // 1. Update Telecom route
+        // 1. Update Telecom route if connection is present
         val connection = getConnection(callId)
         if (connection != null) {
             connection.setBluetoothOn(on)
-        }
+            Log.d(TAG, "toggleBluetooth: Delegated Bluetooth toggling ($on) to Telecom Connection")
+        } else {
+            // 2. Update Linphone native audio device (Fallback when no active Connection)
+            try {
+                val call = linphoneCalls[callId] ?: return
+                val deviceType = if (on) AudioDevice.Type.Bluetooth else AudioDevice.Type.Earpiece
+                val outputDevice = core.audioDevices.find {
+                    it.type == deviceType && it.hasCapability(AudioDevice.Capabilities.CapabilityPlay)
+                }
+                if (outputDevice != null) {
+                    call.outputAudioDevice = outputDevice
+                    Log.d(TAG, "Linphone output audio device set to: ${outputDevice.deviceName} ($deviceType)")
+                } else {
+                    Log.w(TAG, "Linphone: No Bluetooth device found for output")
+                }
 
-        // 2. Update Linphone native audio device
-        try {
-            val call = linphoneCalls[callId] ?: return
-            val deviceType = if (on) AudioDevice.Type.Bluetooth else AudioDevice.Type.Earpiece
-            val device = core.audioDevices.find { it.type == deviceType }
-            if (device != null) {
-                call.outputAudioDevice = device
-                Log.d(TAG, "Linphone output audio device set to: ${device.deviceName} ($deviceType)")
+                val inputDeviceType = if (on) AudioDevice.Type.Bluetooth else AudioDevice.Type.Microphone
+                val inputDevice = core.audioDevices.find {
+                    it.type == inputDeviceType && it.hasCapability(AudioDevice.Capabilities.CapabilityRecord)
+                }
+                if (inputDevice != null) {
+                    call.inputAudioDevice = inputDevice
+                    Log.d(TAG, "Linphone input audio device set to: ${inputDevice.deviceName} ($inputDeviceType)")
+                } else {
+                    Log.w(TAG, "Linphone: No input device found for type $inputDeviceType")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error setting Linphone bluetooth device: ${e.message}")
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error setting Linphone bluetooth device: ${e.message}")
         }
     }
 
@@ -1619,7 +1750,18 @@ class SipEngineManager private constructor(private val context: Context) {
     }
 
     fun sendKeepAliveOptions() {
-        // No-op for Linphone
+        sipScope.launch(Dispatchers.Main) {
+            try {
+                if (::core.isInitialized) {
+                    Log.d(TAG, "Keep-alive Options: Refreshing registrations")
+                    linphoneAccounts.values.forEach { account ->
+                        account.refreshRegister()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error in sendKeepAliveOptions: ${e.message}")
+            }
+        }
     }
 
     fun getFcmToken(): String? {

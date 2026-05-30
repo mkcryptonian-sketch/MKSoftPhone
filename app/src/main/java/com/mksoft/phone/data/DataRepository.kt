@@ -51,8 +51,8 @@ data class VoIpSettings(
     val localDomain: String = "",
     val aecEnabled: Boolean = true,
     val agcEnabled: Boolean = true,
-    val wakeLockEnabled: Boolean = false,
-    val backgroundKeepAliveEnabled: Boolean = false,
+    val wakeLockEnabled: Boolean = true,
+    val backgroundKeepAliveEnabled: Boolean = true,
     
     // New Advanced Settings
     val transportProtocol: String = "TLS", // TLS, TCP, UDP
@@ -76,7 +76,19 @@ data class VoIpSettings(
     val proximitySensorEnabled: Boolean = true,
     val zrtpSasDisplayEnabled: Boolean = true,
     val sipMessagingEnabled: Boolean = true,
-    val postQuantumEnabled: Boolean = false
+    val postQuantumEnabled: Boolean = false,
+
+    // ── Opus Quality Tuning ──────────────────────────────────────
+    // These are exposed in the Audio settings panel so the user can tune them.
+    // Default values are chosen for the best voice quality on mobile networks.
+    /** Opus packetization time in ms. 20ms = standard; lower = less latency; higher = less CPU. */
+    val opusPtime: Int = 20,
+    /** Opus target bitrate in kbps. 0 = auto (recommended; lets the encoder adapt per-frame). */
+    val opusBitrate: Int = 0,
+    /** Enable Opus in-band FEC. Strongly recommended for mobile/lossy networks. */
+    val opusFecEnabled: Boolean = true,
+    /** Enable Opus DTX. Saves bandwidth during silence and hold periods. */
+    val opusDtxEnabled: Boolean = true
 )
 
 @Serializable
@@ -99,9 +111,23 @@ data class SipAccountConfig(
     val useSbc: Boolean = false, // Use SBC for local domain
     val transport: String = "UDP", // "UDP", "TCP", "TLS"
     val port: Int? = null,
-    val srtpMode: Int = 0, // 0 = disabled, 1 = optional, 2 = mandatory
+
+    // ── Per-Account Encryption ───────────────────────────────────────────
+    // ALL defaults are OFF so a freshly-added account works with providers that
+    // do not support any encryption. Enable only what the specific provider requires.
+    /** SRTP media encryption. 0=disabled, 1=optional (offer+accept), 2=mandatory (refuse unencrypted). */
+    val srtpMode: Int = 0,
+    /** ZRTP key exchange for media. Negotiated via Diffie-Hellman at call setup. */
     val zrtpEnabled: Boolean = false,
+    /** LIME End-to-End Encryption for calls and messages. Requires LIME server on the provider side. */
+    val limeEnabled: Boolean = false,
+    /** Show ZRTP Short Authentication String during calls for user to verify. */
+    val zrtpSasDisplayEnabled: Boolean = true,
+
     val numberRewriting: String = "",
+
+    // ── Legacy per-codec priority fields (kept for migration only) ───────────
+    // These are superseded by the [codecs] list. Do not add new fields here.
     val opusPriority: Int = 128,
     val pcmuPriority: Int = 128,
     val pcmaPriority: Int = 128,
@@ -118,6 +144,8 @@ data class SipAccountConfig(
     val g729Enabled: Boolean = true,
     val speexEnabled: Boolean = false,
     val amrEnabled: Boolean = false,
+    // ── End legacy fields ────────────────────────────────────────────────
+
     val fcmToken: String = "",
     val packageName: String = "",
     val isEnabled: Boolean = true,
@@ -128,30 +156,40 @@ data class SipAccountConfig(
      * the SIP engine will generate a fresh UUID and persist it before registering.
      */
     val sipInstanceId: String = "",
+    /** Per-account codec list (ordered by priority, index 0 = highest). Overrides [globalCodecs]. */
     val codecs: List<SipCodecConfig> = emptyList()
 ) {
+    /**
+     * Returns the effective ordered codec list for this account.
+     *
+     * Priority cascade:
+     * 1. Per-account [codecs] list (set in Account Details screen)
+     * 2. [globalCodecs] from [VoIpSettings.globalCodecs] (set in Audio settings)
+     * 3. Legacy individual enable/priority fields (for accounts created before the codec list existed)
+     */
     fun getNormalizedCodecs(globalCodecs: List<SipCodecConfig> = emptyList()): List<SipCodecConfig> {
-        val baseCodecs = if (globalCodecs.isNotEmpty()) globalCodecs else codecs
-        if (baseCodecs.isNotEmpty()) return baseCodecs
-        
-        // Legacy migration & initialization with best-quality-first defaults:
+        // 1. Per-account override takes highest precedence
+        if (codecs.isNotEmpty()) return codecs
+        // 2. Global codec list is the shared baseline
+        if (globalCodecs.isNotEmpty()) return globalCodecs
+        // 3. Legacy field migration: build list from the old individual enable/priority fields
         return listOf(
-            SipCodecConfig("opus/48000/2", opusEnabled, if (opusPriority == 128) 200 else opusPriority),
-            SipCodecConfig("G722/16000/1", g722Enabled, if (g722Priority == 128) 190 else g722Priority),
-            SipCodecConfig("G729/8000/1", g729Enabled, if (g729Priority == 128) 180 else g729Priority),
-            SipCodecConfig("PCMU/8000/1", pcmuEnabled, if (pcmuPriority == 128) 170 else pcmuPriority),
-            SipCodecConfig("PCMA/8000/1", pcmaEnabled, if (pcmaPriority == 128) 160 else pcmaPriority),
-            SipCodecConfig("AMR-WB/16000/1", false, 150),
-            SipCodecConfig("AMR/8000/1", amrEnabled, if (amrPriority == 128) 140 else amrPriority),
-            SipCodecConfig("speex/16000/1", speexEnabled, if (speexPriority == 128) 130 else speexPriority),
-            SipCodecConfig("speex/32000/1", false, 120),
-            SipCodecConfig("speex/8000/1", false, 110),
-            SipCodecConfig("iLBC/8000/1", false, 100),
-            SipCodecConfig("GSM/8000/1", gsmEnabled, if (gsmPriority == 128) 90 else gsmPriority),
-            SipCodecConfig("G7221/16000/1", false, 80),
-            SipCodecConfig("G7221/32000/1", false, 70),
-            SipCodecConfig("L16/16000/1", false, 60),
-            SipCodecConfig("L16/8000/1", false, 50)
+            SipCodecConfig("opus/48000/2",   opusEnabled,  if (opusPriority  == 128) 200 else opusPriority),
+            SipCodecConfig("G722/16000/1",   g722Enabled,  if (g722Priority  == 128) 190 else g722Priority),
+            SipCodecConfig("G729/8000/1",    g729Enabled,  if (g729Priority  == 128) 180 else g729Priority),
+            SipCodecConfig("PCMU/8000/1",    pcmuEnabled,  if (pcmuPriority  == 128) 170 else pcmuPriority),
+            SipCodecConfig("PCMA/8000/1",    pcmaEnabled,  if (pcmaPriority  == 128) 160 else pcmaPriority),
+            SipCodecConfig("AMR-WB/16000/1", false,        150),
+            SipCodecConfig("AMR/8000/1",     amrEnabled,   if (amrPriority   == 128) 140 else amrPriority),
+            SipCodecConfig("speex/16000/1",  speexEnabled, if (speexPriority == 128) 130 else speexPriority),
+            SipCodecConfig("speex/32000/1",  false,        120),
+            SipCodecConfig("speex/8000/1",   false,        110),
+            SipCodecConfig("iLBC/8000/1",    false,        100),
+            SipCodecConfig("GSM/8000/1",     gsmEnabled,   if (gsmPriority   == 128) 90  else gsmPriority),
+            SipCodecConfig("G7221/16000/1",  false,        80),
+            SipCodecConfig("G7221/32000/1",  false,        70),
+            SipCodecConfig("L16/16000/1",    false,        60),
+            SipCodecConfig("L16/8000/1",     false,        50)
         ).sortedByDescending { it.priority }
     }
 }
